@@ -8,7 +8,7 @@ import {
   BarChart3,
   User,
   Bell,
-  Database,
+  Building2,
   Search,
   CheckCircle2,
   Calendar,
@@ -21,7 +21,6 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { useApplications } from '../../context/ApplicationContext';
 import { ThemePicker } from './ThemePicker';
-import { SupabaseModal } from './SupabaseModal';
 import { AuthModal } from './AuthModal';
 import { UserRoleBadge } from '../common/UserRoleBadge';
 import { LogIn } from 'lucide-react';
@@ -39,7 +38,9 @@ export type NavPage =
   | 'alerts'
   | 'profile'
   | 'user-profile'
-  | 'company-profile';
+  | 'company-profile'
+  | 'company-page'
+  | 'company-register';
 
 interface NavbarProps {
   activePage: NavPage;
@@ -47,16 +48,14 @@ interface NavbarProps {
 }
 
 export const Navbar: React.FC<NavbarProps> = ({ activePage, setActivePage }) => {
-  const { profile, signOut, signInDemoUser, isSupabaseLive } = useAuth();
+  const { profile, signOut } = useAuth();
   const { reminders } = useApplications();
 
-  const [showSupabaseModal, setShowSupabaseModal] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showThemePicker, setShowThemePicker] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
-  const [showMoreMenu, setShowMoreMenu] = useState(false);
   const navContainerRef = useRef<HTMLDivElement>(null);
 
   const overdueCount = reminders.filter((r) => r.isOverdue).length;
@@ -67,27 +66,25 @@ export const Navbar: React.FC<NavbarProps> = ({ activePage, setActivePage }) => 
         setShowNotifications(false);
         setShowThemePicker(false);
         setShowProfileMenu(false);
-        setShowMoreMenu(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Primary visible links in navbar
+  // Primary visible links in navbar — Find Jobs leads and gets extra emphasis;
+  // Applications/Saved/Compare/Analytics moved into the profile dropdown to
+  // keep the header lean.
   const primaryNavItems: { id: NavPage; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
-    { id: 'home', label: 'Dashboard', icon: Briefcase },
     { id: 'search', label: 'Find Jobs', icon: Search },
+    { id: 'home', label: 'Dashboard', icon: Briefcase },
     { id: 'foryou', label: 'For You', icon: Sparkles },
     { id: 'community', label: 'Community', icon: Users },
-    { id: 'applications', label: 'Applications', icon: Layers },
-    { id: 'saved', label: 'Saved', icon: Bookmark },
   ];
 
   const handleNavClick = (page: NavPage) => {
     setActivePage(page);
     setShowMobileMenu(false);
-    setShowMoreMenu(false);
   };
 
   return (
@@ -95,8 +92,8 @@ export const Navbar: React.FC<NavbarProps> = ({ activePage, setActivePage }) => 
       <header ref={navContainerRef} className="sticky top-0 z-40 w-full glass-panel border-b border-slate-800/80 transition-all bg-slate-950/80 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-3 sm:px-6">
           <div className="flex items-center justify-between h-14">
-            {/* Left: Brand Logo */}
-            <div className="flex items-center gap-4 lg:gap-6">
+            {/* Left: Brand Logo + Find Jobs (pinned left, wide) + rest of nav (pushed toward the right icons) */}
+            <div className="flex items-center gap-4 lg:gap-6 flex-1 min-w-0">
               <button
                 onClick={() => handleNavClick('home')}
                 className="flex items-center gap-2 group text-left focus:outline-none shrink-0"
@@ -114,58 +111,39 @@ export const Navbar: React.FC<NavbarProps> = ({ activePage, setActivePage }) => 
                 </div>
               </button>
 
-              {/* Desktop Nav Links */}
-              <nav className="hidden lg:flex items-center gap-1">
-                {primaryNavItems.map((item) => {
+              {/* Find Jobs — the primary action, wide and pinned next to the logo */}
+              <button
+                onClick={() => handleNavClick('search')}
+                className={`hidden lg:flex items-center justify-center gap-2 min-w-[420px] px-10 py-2 rounded-xl text-sm font-bold transition-all shrink-0 border ${
+                  activePage === 'search'
+                    ? 'bg-brand-500/15 text-brand-300 border-brand-500/30 shadow-sm'
+                    : 'text-slate-300 border-slate-700 hover:text-white hover:bg-slate-850 hover:border-slate-600'
+                }`}
+              >
+                <Search className={`w-4 h-4 ${activePage === 'search' ? 'text-brand-400' : 'text-slate-400'}`} />
+                <span>Find Jobs</span>
+              </button>
+
+              {/* Rest of Desktop Nav Links — shifted toward the right side, next to the icons */}
+              <nav className="hidden lg:flex items-center gap-1 ml-auto">
+                {primaryNavItems.filter((item) => item.id !== 'search').map((item) => {
                   const Icon = item.icon;
                   const isActive = activePage === item.id;
                   return (
                     <button
                       key={item.id}
                       onClick={() => handleNavClick(item.id)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${isActive
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
+                        isActive
                           ? 'bg-brand-500/15 text-brand-300 border border-brand-500/30 font-semibold shadow-sm'
                           : 'text-slate-300 hover:text-white hover:bg-slate-850'
-                        }`}
+                      }`}
                     >
                       <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-brand-400' : 'text-slate-400'}`} />
                       <span>{item.label}</span>
                     </button>
                   );
                 })}
-
-                {/* More dropdown for Compare & Analytics */}
-                <div className="relative">
-                  <button
-                    onClick={() => setShowMoreMenu(!showMoreMenu)}
-                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium transition-all ${activePage === 'compare' || activePage === 'analytics'
-                        ? 'bg-brand-500/15 text-brand-300 border border-brand-500/30'
-                        : 'text-slate-400 hover:text-white hover:bg-slate-850'
-                      }`}
-                  >
-                    <span>More</span>
-                    <ChevronDown className="w-3 h-3" />
-                  </button>
-
-                  {showMoreMenu && (
-                    <div className="absolute left-0 mt-2 w-44 glass-dropdown rounded-2xl p-1.5 shadow-2xl z-50 border border-slate-700/80 text-xs animate-in fade-in slide-in-from-top-2">
-                      <button
-                        onClick={() => handleNavClick('compare')}
-                        className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800 text-left font-medium"
-                      >
-                        <GitCompare className="w-3.5 h-3.5 text-brand-400" />
-                        <span>Compare Matrix</span>
-                      </button>
-                      <button
-                        onClick={() => handleNavClick('analytics')}
-                        className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800 text-left font-medium"
-                      >
-                        <BarChart3 className="w-3.5 h-3.5 text-cyan-400" />
-                        <span>Search Analytics</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
               </nav>
             </div>
 
@@ -339,6 +317,28 @@ export const Navbar: React.FC<NavbarProps> = ({ activePage, setActivePage }) => 
 
                       <button
                         onClick={() => {
+                          handleNavClick('applications');
+                          setShowProfileMenu(false);
+                        }}
+                        className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition-all text-left"
+                      >
+                        <Layers className="w-3.5 h-3.5 text-brand-400" />
+                        Applications
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          handleNavClick('saved');
+                          setShowProfileMenu(false);
+                        }}
+                        className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition-all text-left"
+                      >
+                        <Bookmark className="w-3.5 h-3.5 text-amber-400" />
+                        Saved Jobs
+                      </button>
+
+                      <button
+                        onClick={() => {
                           handleNavClick('community');
                           setShowProfileMenu(false);
                         }}
@@ -383,27 +383,16 @@ export const Navbar: React.FC<NavbarProps> = ({ activePage, setActivePage }) => 
 
                       <button
                         onClick={() => {
-                          setShowSupabaseModal(true);
+                          handleNavClick('company-register');
                           setShowProfileMenu(false);
                         }}
                         className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 transition-all text-left"
                       >
-                        <Database className="w-3.5 h-3.5 text-emerald-400" />
-                        Supabase Schema Setup
+                        <Building2 className="w-3.5 h-3.5 text-indigo-400" />
+                        Register / Manage Company
                       </button>
 
                       <div className="my-1 border-t border-slate-800" />
-
-                      <button
-                        onClick={() => {
-                          signInDemoUser();
-                          setShowProfileMenu(false);
-                        }}
-                        className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-all text-left"
-                      >
-                        <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-                        Reset Demo Data
-                      </button>
 
                       <button
                         onClick={() => {
@@ -443,6 +432,8 @@ export const Navbar: React.FC<NavbarProps> = ({ activePage, setActivePage }) => 
             <div className="lg:hidden py-3 border-t border-slate-800/80 grid grid-cols-2 sm:grid-cols-3 gap-1.5 animate-in slide-in-from-top-2 duration-150">
               {[
                 ...primaryNavItems,
+                { id: 'applications' as NavPage, label: 'Applications', icon: Layers },
+                { id: 'saved' as NavPage, label: 'Saved', icon: Bookmark },
                 { id: 'compare' as NavPage, label: 'Compare', icon: GitCompare },
                 { id: 'analytics' as NavPage, label: 'Analytics', icon: BarChart3 },
               ].map((item) => {
@@ -466,11 +457,6 @@ export const Navbar: React.FC<NavbarProps> = ({ activePage, setActivePage }) => 
           )}
         </div>
       </header>
-
-      <SupabaseModal
-        isOpen={showSupabaseModal}
-        onClose={() => setShowSupabaseModal(false)}
-      />
 
       <AuthModal
         isOpen={showAuthModal}

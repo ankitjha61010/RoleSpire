@@ -175,6 +175,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
           <Sparkles className="w-3.5 h-3.5 text-brand-400" />
           <span>Instant Demo Candidate (Abhishek Kashyap)</span>
         </button>
+        <p className="text-center text-[10px] text-slate-500 mt-2 leading-snug">
+          Demo mode is a local sandbox on this device only — other members can't find or message it. Sign up with a real email to appear in search, connect, and chat.
+        </p>
 
         {/* Toggle Mode */}
         <div className="text-center mt-4 text-xs text-slate-400">

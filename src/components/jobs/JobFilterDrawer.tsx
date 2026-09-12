@@ -11,7 +11,7 @@ import {
   Check, 
   X 
 } from 'lucide-react';
-import { JobFilters, JobSource, RemoteType } from '../../types';
+import { JobFilters, RemoteType } from '../../types';
 import { LOCATION_OPTIONS, WORLDWIDE_LOCATION } from '../../constants/indiaLocations';
 
 interface JobFilterDrawerProps {
@@ -44,13 +44,6 @@ export const JobFilterDrawer: React.FC<JobFilterDrawerProps> = ({
     { id: '3d', label: 'Past 3 Days' },
     { id: '7d', label: 'Past 7 Days' },
     { id: '14d', label: 'Past 2 Weeks' },
-  ];
-
-  const sourceOptions: { id: JobSource | 'all'; label: string }[] = [
-    { id: 'all', label: 'All Sources' },
-    { id: 'adzuna', label: 'Adzuna API' },
-    { id: 'remotive', label: 'Remotive API' },
-    { id: 'arbeitnow', label: 'Arbeitnow API' },
   ];
 
   const content = (
@@ -217,25 +210,6 @@ export const JobFilterDrawer: React.FC<JobFilterDrawerProps> = ({
         />
       </div>
 
-      {/* 7. Source Provider */}
-      <div>
-        <label className="block font-bold text-slate-300 mb-2">Job Source</label>
-        <div className="grid grid-cols-2 gap-1.5">
-          {sourceOptions.map((opt) => (
-            <button
-              key={opt.id}
-              onClick={() => onChangeFilters({ source: opt.id })}
-              className={`p-2 rounded-xl text-left text-[11px] font-medium transition-all truncate ${
-                (filters.source || 'all') === opt.id
-                  ? 'bg-brand-500/20 text-brand-300 border border-brand-500/40 font-semibold'
-                  : 'bg-slate-900/80 text-slate-400 hover:text-slate-200 border border-slate-800'
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      </div>
     </div>
   );
 

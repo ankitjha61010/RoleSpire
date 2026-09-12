@@ -1,12 +1,14 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { UserProfile, UserSkill } from '../types';
 import { supabase, isSupabaseConfigured, LOCAL_STORAGE_KEYS } from '../lib/supabaseClient';
+import { dbRowToProfilePatch, profileToDbUpdate } from '../lib/profileMapper';
 
 interface AuthContextType {
   user: { id: string; email: string } | null;
   profile: UserProfile | null;
   isLoading: boolean;
   isSupabaseLive: boolean;
+  isRealSession: boolean;
   signIn: (email: string, password?: string) => Promise<void>;
   signUp: (email: string, fullName: string, password?: string) => Promise<void>;
   signInDemoUser: () => void;
@@ -45,10 +47,33 @@ const DEFAULT_PROFILE: UserProfile = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// `profiles` has no `skills` column — those live in `user_skills`. Falls back
+// to the demo skill set (only ever relevant to the local/demo sandbox path).
+async function fetchSkills(userId: string): Promise<UserSkill[]> {
+  if (!supabase) return DEFAULT_PROFILE.skills;
+  const { data, error } = await supabase
+    .from('user_skills')
+    .select('id, skill_name, years_of_experience, proficiency')
+    .eq('user_id', userId);
+  if (error || !data) return DEFAULT_PROFILE.skills;
+  return data.map((row: any) => ({
+    id: row.id,
+    name: row.skill_name,
+    yearsOfExperience: row.years_of_experience,
+    proficiency: row.proficiency,
+  }));
+}
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<{ id: string; email: string } | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  // True only when `profile.id` is a real Supabase auth.uid() backed by an
+  // actual session — as opposed to the local/demo fallback, whose fake ids
+  // (e.g. 'usr_abhishek_demo') can't satisfy any RLS/FK check tied to
+  // auth.uid(), so cross-user features (search, posts, chat) must stay
+  // local-only sandboxes for those sessions.
+  const [isRealSession, setIsRealSession] = useState(false);
 
   // Initialize auth state and subscribe to Supabase auth events
   useEffect(() => {
@@ -64,6 +89,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (session?.user) {
             const authUser = { id: session.user.id, email: session.user.email || '' };
             setUser(authUser);
+            setIsRealSession(true);
 
             // Fetch profile
             const { data: profileData } = await supabase
@@ -75,8 +101,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (profileData) {
               const fullProfile: UserProfile = {
                 ...DEFAULT_PROFILE,
-                ...profileData,
-                skills: DEFAULT_PROFILE.skills,
+                ...dbRowToProfilePatch(profileData),
+                id: session.user.id,
+                email: session.user.email || '',
+                skills: await fetchSkills(session.user.id),
               };
               setProfile(fullProfile);
               localStorage.setItem(LOCAL_STORAGE_KEYS.AUTH_SESSION, JSON.stringify(authUser));
@@ -103,6 +131,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (event === 'SIGNED_IN' && currentSession?.user) {
               const authUser = { id: currentSession.user.id, email: currentSession.user.email || '' };
               setUser(authUser);
+              setIsRealSession(true);
 
               const { data: profileData } = await supabase
                 .from('profiles')
@@ -112,14 +141,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
               const prof: UserProfile = {
                 ...DEFAULT_PROFILE,
-                ...(profileData || {}),
+                ...(profileData ? dbRowToProfilePatch(profileData) : {}),
                 id: currentSession.user.id,
                 email: currentSession.user.email || '',
-                fullName: currentSession.user.user_metadata?.full_name || currentSession.user.email?.split('@')[0] || 'User',
-                // `profiles` has no `skills` column (those live in `user_skills`), and a
-                // stale localStorage snapshot could carry a null/missing skills array —
-                // never let a malformed profile drop this to something scoring can't map over.
-                skills: DEFAULT_PROFILE.skills,
+                fullName: profileData?.full_name || currentSession.user.user_metadata?.full_name || currentSession.user.email?.split('@')[0] || 'User',
+                skills: await fetchSkills(currentSession.user.id),
               };
               setProfile(prof);
               localStorage.setItem(LOCAL_STORAGE_KEYS.AUTH_SESSION, JSON.stringify(authUser));
@@ -127,6 +153,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             } else if (event === 'SIGNED_OUT') {
               setUser(null);
               setProfile(null);
+              setIsRealSession(false);
               localStorage.removeItem(LOCAL_STORAGE_KEYS.AUTH_SESSION);
               localStorage.removeItem(LOCAL_STORAGE_KEYS.USER_PROFILE);
             }
@@ -145,6 +172,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     function loadStoredOrDemo() {
+      setIsRealSession(false);
       const storedUser = localStorage.getItem(LOCAL_STORAGE_KEYS.AUTH_SESSION);
       const storedProfile = localStorage.getItem(LOCAL_STORAGE_KEYS.USER_PROFILE);
 
@@ -199,15 +227,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             if (dbProfile) {
               userProfile = {
                 ...userProfile,
-                ...dbProfile,
+                ...dbRowToProfilePatch(dbProfile),
               };
             }
+            userProfile.skills = await fetchSkills(data.user.id);
           } catch (e) {
             console.warn('Profile fetch warning:', e);
           }
 
           setUser(newUser);
           setProfile(userProfile);
+          setIsRealSession(true);
           localStorage.setItem(LOCAL_STORAGE_KEYS.AUTH_SESSION, JSON.stringify(newUser));
           localStorage.setItem(LOCAL_STORAGE_KEYS.USER_PROFILE, JSON.stringify(userProfile));
         }
@@ -226,6 +256,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
       setUser(newUser);
       setProfile(newProfile);
+      setIsRealSession(false);
       localStorage.setItem(LOCAL_STORAGE_KEYS.AUTH_SESSION, JSON.stringify(newUser));
       localStorage.setItem(LOCAL_STORAGE_KEYS.USER_PROFILE, JSON.stringify(newProfile));
     }
@@ -252,6 +283,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           };
           setUser(newUser);
           setProfile(newProfile);
+          setIsRealSession(true);
           localStorage.setItem(LOCAL_STORAGE_KEYS.AUTH_SESSION, JSON.stringify(newUser));
           localStorage.setItem(LOCAL_STORAGE_KEYS.USER_PROFILE, JSON.stringify(newProfile));
         }
@@ -268,6 +300,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           };
           setUser(newUser);
           setProfile(newProfile);
+          setIsRealSession(false);
           localStorage.setItem(LOCAL_STORAGE_KEYS.AUTH_SESSION, JSON.stringify(newUser));
           localStorage.setItem(LOCAL_STORAGE_KEYS.USER_PROFILE, JSON.stringify(newProfile));
         } else {
@@ -284,6 +317,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
       setUser(newUser);
       setProfile(newProfile);
+      setIsRealSession(false);
       localStorage.setItem(LOCAL_STORAGE_KEYS.AUTH_SESSION, JSON.stringify(newUser));
       localStorage.setItem(LOCAL_STORAGE_KEYS.USER_PROFILE, JSON.stringify(newProfile));
     }
@@ -293,6 +327,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signInDemoUser = () => {
     setUser({ id: DEFAULT_PROFILE.id, email: DEFAULT_PROFILE.email });
     setProfile(DEFAULT_PROFILE);
+    setIsRealSession(false);
     localStorage.setItem(LOCAL_STORAGE_KEYS.AUTH_SESSION, JSON.stringify({ id: DEFAULT_PROFILE.id, email: DEFAULT_PROFILE.email }));
     localStorage.setItem(LOCAL_STORAGE_KEYS.USER_PROFILE, JSON.stringify(DEFAULT_PROFILE));
   };
@@ -303,6 +338,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     setUser(null);
     setProfile(null);
+    setIsRealSession(false);
     localStorage.removeItem(LOCAL_STORAGE_KEYS.AUTH_SESSION);
     localStorage.removeItem(LOCAL_STORAGE_KEYS.USER_PROFILE);
   };
@@ -317,23 +353,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setProfile(merged);
     localStorage.setItem(LOCAL_STORAGE_KEYS.USER_PROFILE, JSON.stringify(merged));
 
-    if (isSupabaseConfigured && supabase && user) {
+    // A demo/local-sandbox session's id isn't a real auth.uid(), so it can
+    // never satisfy the `profiles` RLS check — only sync real sessions.
+    if (isSupabaseConfigured && supabase && user && isRealSession) {
       try {
         await supabase
           .from('profiles')
-          .update({
-            full_name: merged.fullName,
-            headline: merged.headline,
-            company: merged.company,
-            bio: merged.bio,
-            experience_years: merged.experienceYears,
-            current_location: merged.currentLocation,
-            preferred_locations: merged.preferredLocations,
-            expected_salary_min: merged.expectedSalaryMin,
-            remote_preference: merged.remotePreference,
-            resume_url: merged.resumeUrl,
-            updated_at: new Date().toISOString(),
-          })
+          .update(profileToDbUpdate(merged))
           .eq('id', user.id);
       } catch (e) {
         console.warn('Supabase profile update warning:', e);
@@ -349,7 +375,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (exists) return;
 
     const updatedSkills = [...profile.skills, newSkill];
-    await updateProfile({ skills: updatedSkills });
+    setProfile({ ...profile, skills: updatedSkills });
+    localStorage.setItem(LOCAL_STORAGE_KEYS.USER_PROFILE, JSON.stringify({ ...profile, skills: updatedSkills }));
+
+    if (isSupabaseConfigured && supabase && user && isRealSession) {
+      try {
+        await supabase
+          .from('user_skills')
+          .upsert(
+            { user_id: user.id, skill_name: newSkill.name, years_of_experience: newSkill.yearsOfExperience, proficiency: newSkill.proficiency },
+            { onConflict: 'user_id,skill_name' }
+          );
+      } catch (e) {
+        console.warn('Supabase skill add warning:', e);
+      }
+    }
   };
 
   const removeSkill = async (skillName: string) => {
@@ -357,7 +397,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const updatedSkills = profile.skills.filter(
       (s) => s.name.toLowerCase() !== skillName.toLowerCase()
     );
-    await updateProfile({ skills: updatedSkills });
+    setProfile({ ...profile, skills: updatedSkills });
+    localStorage.setItem(LOCAL_STORAGE_KEYS.USER_PROFILE, JSON.stringify({ ...profile, skills: updatedSkills }));
+
+    if (isSupabaseConfigured && supabase && user && isRealSession) {
+      try {
+        await supabase
+          .from('user_skills')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('skill_name', skillName);
+      } catch (e) {
+        console.warn('Supabase skill remove warning:', e);
+      }
+    }
   };
 
   return (
@@ -367,6 +420,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         profile,
         isLoading,
         isSupabaseLive: isSupabaseConfigured,
+        isRealSession,
         signIn,
         signUp,
         signInDemoUser,

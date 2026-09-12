@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { ProfileSectionsProvider } from './context/ProfileSectionsContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { ApplicationProvider } from './context/ApplicationContext';
 import { SavedJobsProvider } from './context/SavedJobsContext';
@@ -24,9 +25,10 @@ import { UserProfilePage } from './pages/UserProfilePage';
 import { JobDetailsModal } from './components/jobs/JobDetailsModal';
 import { JobComparisonTray } from './components/jobs/JobComparisonTray';
 import { FloatingChatWidget } from './components/chat/FloatingChatWidget';
-import { Job, JobFilters, JobSortOption, PostAuthor } from './types';
+import { Job, JobFilters, JobSortOption } from './types';
 import { jobAggregator } from './services/jobProviders/jobAggregator';
 import { CompanyProfilePage } from './pages/CompanyProfilePage';
+import { CompanyPage } from './pages/CompanyPage';
 import { DerivedCompany, findDerivedCompany } from './services/companyDirectory';
 
 const MainApp: React.FC = () => {
@@ -34,8 +36,9 @@ const MainApp: React.FC = () => {
 
   const [activePage, setActivePage] = useState<NavPage>('home');
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
-  const [viewingAuthor, setViewingAuthor] = useState<PostAuthor | null>(null);
+  const [viewingUserId, setViewingUserId] = useState<string | null>(null);
   const [selectedCompany, setSelectedCompany] = useState<DerivedCompany | null>(null);
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
 
   // Search & Filter State
   const [filters, setFilters] = useState<JobFilters>({});
@@ -121,7 +124,7 @@ const MainApp: React.FC = () => {
               setActivePage('company-profile');
             }}
             onSelectAuthor={(author) => {
-              setViewingAuthor(author);
+              setViewingUserId(author.id);
               setActivePage('user-profile');
             }}
             sortOption={sortOption}
@@ -153,7 +156,7 @@ const MainApp: React.FC = () => {
           <CommunityPage 
             setActivePage={setActivePage} 
             onSelectAuthor={(author) => {
-              setViewingAuthor(author);
+              setViewingUserId(author.id);
               setActivePage('user-profile');
             }}
           />
@@ -161,8 +164,19 @@ const MainApp: React.FC = () => {
 
         {activePage === 'user-profile' && (
           <UserProfilePage
-            author={viewingAuthor}
+            userId={viewingUserId}
             onBack={() => setActivePage('community')}
+            onSelectCompanyId={(id) => {
+              setSelectedCompanyId(id);
+              setActivePage('company-page');
+            }}
+          />
+        )}
+
+        {activePage === 'company-page' && (
+          <CompanyPage
+            companyId={selectedCompanyId}
+            onBack={() => setActivePage('user-profile')}
           />
         )}
 
@@ -219,19 +233,21 @@ export function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <CommunityProvider>
-          <ChatProvider>
-            <ApplicationProvider>
-              <SavedJobsProvider>
-                <ComparisonProvider>
-                  <AlertsProvider>
-                    <MainApp />
-                  </AlertsProvider>
-                </ComparisonProvider>
-              </SavedJobsProvider>
-            </ApplicationProvider>
-          </ChatProvider>
-        </CommunityProvider>
+        <ProfileSectionsProvider>
+          <CommunityProvider>
+            <ChatProvider>
+              <ApplicationProvider>
+                <SavedJobsProvider>
+                  <ComparisonProvider>
+                    <AlertsProvider>
+                      <MainApp />
+                    </AlertsProvider>
+                  </ComparisonProvider>
+                </SavedJobsProvider>
+              </ApplicationProvider>
+            </ChatProvider>
+          </CommunityProvider>
+        </ProfileSectionsProvider>
       </AuthProvider>
     </ThemeProvider>
   );

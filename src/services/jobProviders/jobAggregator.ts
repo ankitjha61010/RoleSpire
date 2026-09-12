@@ -1,28 +1,50 @@
-import { Job, JobFilters, JobSortOption, UserProfile } from '../../types';
+import { Job, JobFilters, JobSortOption, JobSource, UserProfile } from '../../types';
 import { calculateMatchScore } from '../scoring/matchScoreEngine';
 import { calculateQualityScore } from '../scoring/qualityScoreEngine';
 import { analyzeSkillGap } from '../scoring/skillGapEngine';
 import { clusterAndDeduplicateJobs } from '../dedup/duplicateDetector';
-import { AdzunaProvider } from './adzunaProvider';
-import { RemotiveProvider } from './remotiveProvider';
-import { ArbeitnowProvider } from './arbeitnowProvider';
+import { supabase } from '../../lib/supabaseClient';
 
 export interface AggregateJobsResult {
   jobs: Job[];
   total: number;
   duplicateCount: number;
-  isRealApiActive: boolean;
-  providersActive: string[];
+}
+
+function rowToJob(row: any): Job {
+  return {
+    id: row.id,
+    source: (row.source as JobSource) || 'direct',
+    sourceJobId: row.source_job_id ?? undefined,
+    title: row.title,
+    company: row.company,
+    companyLogo: row.company_logo ?? undefined,
+    companyDomain: row.company_domain ?? undefined,
+    location: row.location,
+    description: row.description,
+    requirements: row.requirements || [],
+    benefits: row.benefits || [],
+    salaryMin: row.salary_min ?? undefined,
+    salaryMax: row.salary_max ?? undefined,
+    currency: row.currency || 'INR',
+    employmentType: row.employment_type,
+    remoteType: row.remote_type,
+    skills: row.skills || [],
+    experienceLevel: row.experience_level,
+    postedAt: row.posted_at,
+    updatedAt: row.updated_at ?? undefined,
+    applyUrl: row.apply_url,
+    applicationType: row.application_type || 'direct',
+    isActive: row.is_active,
+    duplicateClusterId: row.duplicate_cluster_id ?? undefined,
+  };
 }
 
 export class JobAggregatorService {
-  private adzuna = new AdzunaProvider();
-  private remotive = new RemotiveProvider();
-  private arbeitnow = new ArbeitnowProvider();
-
   /**
-   * Main aggregator query function — queries all live job providers in parallel
-   * and merges genuine results. No fabricated/sample data is ever mixed in.
+   * Main job query — reads directly from our own Supabase `jobs` table
+   * (populated by company admins posting roles), rather than any third-party
+   * job board API. No fabricated/sample data is ever mixed in.
    */
   async searchJobs(
     filters: JobFilters = {},
@@ -30,57 +52,23 @@ export class JobAggregatorService {
     sort: JobSortOption = 'best_match'
   ): Promise<AggregateJobsResult> {
     let combinedJobs: Job[] = [];
-    const providersActive: string[] = [];
-    let isRealApiActive = false;
 
-    const providerCalls: Promise<void>[] = [];
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('jobs')
+        .select('*')
+        .eq('is_active', true)
+        .order('posted_at', { ascending: false })
+        .limit(500);
 
-    // Adzuna requires free API credentials (VITE_ADZUNA_APP_ID / VITE_ADZUNA_APP_KEY)
-    if (this.adzuna.isConfigured) {
-      providerCalls.push(
-        this.adzuna
-          .fetchJobs({ query: filters.query, location: filters.location, filters })
-          .then((result) => {
-            if (result.jobs.length > 0) {
-              combinedJobs = [...combinedJobs, ...result.jobs];
-              providersActive.push('Adzuna Live API');
-              isRealApiActive = true;
-            }
-          })
-          .catch((err) => console.warn('Adzuna fetch failed:', err))
-      );
+      if (error) {
+        console.warn('Failed to load jobs from database:', error);
+      } else if (data) {
+        combinedJobs = data.map(rowToJob);
+      }
     }
 
-    // Remotive & Arbeitnow are free, public, and require no API key
-    providerCalls.push(
-      this.remotive
-        .fetchJobs({ query: filters.query, location: filters.location, filters })
-        .then((result) => {
-          if (result.jobs.length > 0) {
-            combinedJobs = [...combinedJobs, ...result.jobs];
-            providersActive.push('Remotive Live API');
-            isRealApiActive = true;
-          }
-        })
-        .catch((err) => console.warn('Remotive fetch failed:', err))
-    );
-
-    providerCalls.push(
-      this.arbeitnow
-        .fetchJobs({ query: filters.query, location: filters.location, filters })
-        .then((result) => {
-          if (result.jobs.length > 0) {
-            combinedJobs = [...combinedJobs, ...result.jobs];
-            providersActive.push('Arbeitnow Live API');
-            isRealApiActive = true;
-          }
-        })
-        .catch((err) => console.warn('Arbeitnow fetch failed:', err))
-    );
-
-    await Promise.all(providerCalls);
-
-    // 2. Filter listings
+    // 1. Filter listings
     let filtered = combinedJobs.filter((job) => {
       // Keyword search — match every word in the query somewhere across the
       // job's searchable text, rather than requiring the exact phrase. This
@@ -123,17 +111,12 @@ export class JobAggregatorService {
         if (job.employmentType !== filters.employmentType) return false;
       }
 
-      // Salary filter — most live listings don't disclose a salary at all
-      // (that isn't the same as "pays below the minimum"), so only exclude a
-      // job here when it actually reports a number that falls short.
+      // Salary filter — most listings don't disclose a salary at all (that
+      // isn't the same as "pays below the minimum"), so only exclude a job
+      // here when it actually reports a number that falls short.
       if (filters.minSalary && filters.minSalary > 0) {
         const reportedSalary = job.salaryMax || job.salaryMin;
         if (reportedSalary != null && reportedSalary < filters.minSalary) return false;
-      }
-
-      // Source filter
-      if (filters.source && filters.source !== 'all') {
-        if (job.source !== filters.source) return false;
       }
 
       // Date posted
@@ -151,7 +134,7 @@ export class JobAggregatorService {
       return true;
     });
 
-    // 3. Enrich each job with Match, Quality, and Skill Gap scores
+    // 2. Enrich each job with Match, Quality, and Skill Gap scores
     let scoredJobs: Job[] = filtered.map((job) => {
       const matchScore = calculateMatchScore(job, profile);
       const qualityScore = calculateQualityScore(job);
@@ -165,7 +148,8 @@ export class JobAggregatorService {
       };
     });
 
-    // 4. Duplicate Detection & Clustering
+    // 3. Duplicate Detection & Clustering (still useful once multiple
+    // companies cross-post similar-looking roles)
     const { clusteredJobs, duplicateCount } = clusterAndDeduplicateJobs(scoredJobs);
     scoredJobs = clusteredJobs;
 
@@ -179,7 +163,7 @@ export class JobAggregatorService {
       scoredJobs = scoredJobs.filter((j) => (j.qualityScore?.score || 0) >= (filters.minQualityScore || 0));
     }
 
-    // 5. Sorting
+    // 4. Sorting
     scoredJobs.sort((a, b) => {
       if (sort === 'best_match') {
         return (b.matchScore?.totalScore || 0) - (a.matchScore?.totalScore || 0);
@@ -202,8 +186,6 @@ export class JobAggregatorService {
       jobs: scoredJobs,
       total: scoredJobs.length,
       duplicateCount,
-      isRealApiActive,
-      providersActive,
     };
   }
 }
