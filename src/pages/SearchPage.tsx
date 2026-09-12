@@ -23,9 +23,6 @@ import {
   MessageSquare,
   Globe,
   ArrowRight,
-  ShieldCheck,
-  MapPin,
-  Landmark
 } from 'lucide-react';
 import { Job, JobFilters, JobSortOption, PostAuthor } from '../types';
 import { JobCard } from '../components/jobs/JobCard';
@@ -35,7 +32,6 @@ import { DerivedCompany, deriveCompaniesFromJobs } from '../services/companyDire
 import { useCommunity } from '../context/CommunityContext';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabaseClient';
-import { lookupCompany, isCompanyRegistryConfigured, CompanyRegistryRecord } from '../services/companyRegistry';
 import { UserRoleBadge } from '../components/common/UserRoleBadge';
 import { ScrollablePaginatedList } from '../components/common/ScrollablePaginatedList';
 import confetti from 'canvas-confetti';
@@ -122,28 +118,6 @@ export const SearchPage: React.FC<SearchPageProps> = ({
   const [parsedMeta, setParsedMeta] = useState<ParsedSearchQuery | null>(null);
   const [jobsPage, setJobsPage] = useState(1);
   const [companiesPage, setCompaniesPage] = useState(1);
-  const [registryQuery, setRegistryQuery] = useState('');
-  const [registryResult, setRegistryResult] = useState<CompanyRegistryRecord | null>(null);
-  const [registryLoading, setRegistryLoading] = useState(false);
-  const [registryError, setRegistryError] = useState<string | null>(null);
-  const [registrySearched, setRegistrySearched] = useState(false);
-
-  const handleRegistryLookup = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!registryQuery.trim()) return;
-    setRegistryLoading(true);
-    setRegistryError(null);
-    setRegistrySearched(true);
-    try {
-      const result = await lookupCompany(registryQuery);
-      setRegistryResult(result);
-    } catch (err: any) {
-      setRegistryError(err.message || 'Lookup failed. Please try again.');
-      setRegistryResult(null);
-    } finally {
-      setRegistryLoading(false);
-    }
-  };
   const [peoplePage, setPeoplePage] = useState(1);
   const [postsPage, setPostsPage] = useState(1);
 
@@ -590,119 +564,6 @@ export const SearchPage: React.FC<SearchPageProps> = ({
             <p className="text-[11px] sm:text-xs text-slate-400">
               Built live from current job listings
             </p>
-          </div>
-
-          {/* Official India Company Registry Lookup */}
-          <div className="glass-panel rounded-2xl p-5 border border-slate-800 space-y-3">
-            <div className="flex items-center gap-2">
-              <Landmark className="w-4 h-4 text-brand-400 shrink-0" />
-              <h3 className="text-sm font-bold text-white">Can't find a company above? Verify it in the official registry</h3>
-            </div>
-            <p className="text-[11px] text-slate-400 leading-relaxed">
-              The list above only shows companies currently hiring on live job boards. Any company registered in India — hiring or not —
-              can be looked up directly from the Ministry of Corporate Affairs' official records. This needs the exact registered legal
-              name (e.g. <span className="font-mono text-slate-300">KAMAL FINCAP PRIVATE LIMITED</span>) or its CIN — it can't fuzzy-search partial names.
-            </p>
-
-            {!isCompanyRegistryConfigured ? (
-              <div className="text-[11px] text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-xl p-2.5">
-                Registry lookup isn't configured yet — add <span className="font-mono">VITE_DATA_GOV_IN_API_KEY</span> and{' '}
-                <span className="font-mono">VITE_DATA_GOV_IN_COMPANY_RESOURCE_ID</span> to your environment.
-              </div>
-            ) : (
-              <form onSubmit={handleRegistryLookup} className="flex flex-col sm:flex-row gap-2">
-                <input
-                  type="text"
-                  value={registryQuery}
-                  onChange={(e) => setRegistryQuery(e.target.value)}
-                  placeholder="Exact registered name or CIN (e.g. XXXXXX PRIVATE LIMITED)"
-                  className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-brand-500"
-                />
-                <button
-                  type="submit"
-                  disabled={registryLoading}
-                  className="brand-gradient-btn text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-md disabled:opacity-60 shrink-0"
-                >
-                  <Search className="w-3.5 h-3.5" />
-                  <span>{registryLoading ? 'Looking up…' : 'Look Up'}</span>
-                </button>
-              </form>
-            )}
-
-            {registrySearched && !registryLoading && (
-              <div className="pt-2">
-                {registryError ? (
-                  <div className="text-[11px] text-rose-300 bg-rose-500/10 border border-rose-500/20 rounded-xl p-2.5">
-                    {registryError}
-                  </div>
-                ) : !registryResult ? (
-                  <div className="text-[11px] text-slate-400 bg-slate-900/60 border border-slate-800 rounded-xl p-2.5">
-                    No exact match found. Double-check the full legal name (including "Private Limited"/"Limited") or CIN, and try again.
-                  </div>
-                ) : (
-                  <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/[0.03] p-4 space-y-3">
-                    <div className="flex items-start justify-between gap-3 flex-wrap">
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-                          <h4 className="text-sm font-bold text-white">{registryResult.name}</h4>
-                        </div>
-                        <p className="text-[11px] text-slate-400 font-mono mt-0.5">{registryResult.cin}</p>
-                      </div>
-                      <span
-                        className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${registryResult.status.toLowerCase() === 'active'
-                            ? 'bg-emerald-500/20 text-emerald-300'
-                            : 'bg-slate-700 text-slate-300'
-                          }`}
-                      >
-                        {registryResult.status || 'Unknown'}
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
-                      <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800">
-                        <div className="text-slate-500 text-[10px] uppercase tracking-wider">Class / Category</div>
-                        <div className="text-slate-200 mt-0.5">{registryResult.companyClass || '—'} · {registryResult.category || '—'}</div>
-                      </div>
-                      <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800">
-                        <div className="text-slate-500 text-[10px] uppercase tracking-wider">Registered On</div>
-                        <div className="text-slate-200 mt-0.5">{registryResult.registrationDate || '—'}</div>
-                      </div>
-                      <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800">
-                        <div className="text-slate-500 text-[10px] uppercase tracking-wider">Authorized Capital</div>
-                        <div className="text-emerald-400 font-semibold mt-0.5">
-                          {registryResult.authorizedCapital ? `₹${Number(registryResult.authorizedCapital).toLocaleString('en-IN')}` : '—'}
-                        </div>
-                      </div>
-                      <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800">
-                        <div className="text-slate-500 text-[10px] uppercase tracking-wider">Paid-up Capital</div>
-                        <div className="text-emerald-400 font-semibold mt-0.5">
-                          {registryResult.paidupCapital ? `₹${Number(registryResult.paidupCapital).toLocaleString('en-IN')}` : '—'}
-                        </div>
-                      </div>
-                      <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 sm:col-span-2">
-                        <div className="text-slate-500 text-[10px] uppercase tracking-wider flex items-center gap-1">
-                          <MapPin className="w-3 h-3" /> Registered Office
-                        </div>
-                        <div className="text-slate-200 mt-0.5">{registryResult.registeredAddress || '—'}</div>
-                      </div>
-                      <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800">
-                        <div className="text-slate-500 text-[10px] uppercase tracking-wider">Industry (NIC)</div>
-                        <div className="text-slate-200 mt-0.5">{registryResult.industrialClassification || '—'} {registryResult.nicCode && `(${registryResult.nicCode})`}</div>
-                      </div>
-                      <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800">
-                        <div className="text-slate-500 text-[10px] uppercase tracking-wider">Registrar (RoC)</div>
-                        <div className="text-slate-200 mt-0.5">{registryResult.rocCode || '—'}</div>
-                      </div>
-                    </div>
-
-                    <p className="text-[10px] text-slate-500">
-                      Source: Ministry of Corporate Affairs, via data.gov.in — official company registry filing data.
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
 
           {companiesList.length === 0 ? (

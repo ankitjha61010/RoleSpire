@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS public.user_skills (
 -- 5. JOBS TABLE (Public directory / Cached Aggregator listings)
 CREATE TABLE IF NOT EXISTS public.jobs (
     id TEXT PRIMARY KEY,
-    source TEXT NOT NULL, -- 'adzuna', 'greenhouse', 'lever', 'direct'
+    source TEXT NOT NULL DEFAULT 'direct', -- company admins post jobs directly; no third-party job boards
     source_job_id TEXT,
     title TEXT NOT NULL,
     company TEXT NOT NULL,

@@ -23,11 +23,13 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ jobs }) => {
   const { profile } = useAuth();
 
   // Metrics
-  const totalApplied = Math.max(applications.length, 12);
-  const totalInterviews = applications.filter((a) => a.status === 'interview' || a.status === 'offer').length || 4;
-  const totalOffers = applications.filter((a) => a.status === 'offer').length || 1;
-  const totalAssessments = applications.filter((a) => a.status === 'assessment').length || 3;
-  const responseRate = Math.round(((totalInterviews + totalAssessments) / totalApplied) * 100);
+  const totalApplied = applications.length;
+  const totalInterviews = applications.filter((a) => a.status === 'interview' || a.status === 'offer').length;
+  const totalOffers = applications.filter((a) => a.status === 'offer').length;
+  const totalAssessments = applications.filter((a) => a.status === 'assessment').length;
+  const responseRate = totalApplied > 0 ? Math.round(((totalInterviews + totalAssessments) / totalApplied) * 100) : 0;
+  const latestOffer = applications.find((a) => a.status === 'offer');
+  const pctOfApplied = (count: number) => (totalApplied > 0 ? Math.round((count / totalApplied) * 100) : 0);
 
   // Skill demand aggregation from all active jobs
   const skillCountMap = new Map<string, number>();
@@ -66,8 +68,8 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ jobs }) => {
             <Send className="w-4 h-4 text-brand-400" />
           </div>
           <div className="text-3xl font-extrabold text-white">{totalApplied}</div>
-          <div className="text-[11px] text-emerald-400 font-semibold mt-1">
-            ↑ +4 this week
+          <div className="text-[11px] text-slate-400 mt-1">
+            Total tracked applications
           </div>
         </div>
 
@@ -89,7 +91,7 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ jobs }) => {
           </div>
           <div className="text-3xl font-extrabold text-cyan-400">{responseRate}%</div>
           <div className="text-[11px] text-slate-400 mt-1">
-            Industry avg: ~8% (You are +13% higher)
+            Interviews + assessments ÷ applications
           </div>
         </div>
 
@@ -100,7 +102,7 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ jobs }) => {
           </div>
           <div className="text-3xl font-extrabold text-emerald-400">{totalOffers}</div>
           <div className="text-[11px] text-slate-400 mt-1">
-            {applications.find((a) => a.status === 'offer')?.companyName || 'Stripe'}
+            {latestOffer?.companyName || 'No offers yet'}
           </div>
         </div>
       </div>
@@ -121,10 +123,10 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ jobs }) => {
             <div>
               <div className="flex justify-between text-slate-300 mb-1">
                 <span>1. Applied ({totalApplied})</span>
-                <span className="font-bold font-mono">100%</span>
+                <span className="font-bold font-mono">{totalApplied > 0 ? '100%' : '0%'}</span>
               </div>
               <div className="w-full bg-slate-800 h-3 rounded-full overflow-hidden">
-                <div className="bg-brand-500 h-full rounded-full w-full" />
+                <div className={`bg-brand-500 h-full rounded-full ${totalApplied > 0 ? 'w-full' : 'w-0'}`} />
               </div>
             </div>
 
@@ -132,13 +134,13 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ jobs }) => {
               <div className="flex justify-between text-slate-300 mb-1">
                 <span>2. Technical Assessment ({totalAssessments})</span>
                 <span className="font-bold font-mono">
-                  {Math.round((totalAssessments / totalApplied) * 100)}%
+                  {pctOfApplied(totalAssessments)}%
                 </span>
               </div>
               <div className="w-full bg-slate-800 h-3 rounded-full overflow-hidden">
                 <div
                   className="bg-purple-500 h-full rounded-full transition-all"
-                  style={{ width: `${Math.round((totalAssessments / totalApplied) * 100)}%` }}
+                  style={{ width: `${pctOfApplied(totalAssessments)}%` }}
                 />
               </div>
             </div>
@@ -147,13 +149,13 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ jobs }) => {
               <div className="flex justify-between text-slate-300 mb-1">
                 <span>3. Interviews Scheduled ({totalInterviews})</span>
                 <span className="font-bold font-mono">
-                  {Math.round((totalInterviews / totalApplied) * 100)}%
+                  {pctOfApplied(totalInterviews)}%
                 </span>
               </div>
               <div className="w-full bg-slate-800 h-3 rounded-full overflow-hidden">
                 <div
                   className="bg-amber-500 h-full rounded-full transition-all"
-                  style={{ width: `${Math.round((totalInterviews / totalApplied) * 100)}%` }}
+                  style={{ width: `${pctOfApplied(totalInterviews)}%` }}
                 />
               </div>
             </div>
@@ -162,13 +164,13 @@ export const AnalyticsPage: React.FC<AnalyticsPageProps> = ({ jobs }) => {
               <div className="flex justify-between text-slate-300 mb-1">
                 <span>4. Offers Secured ({totalOffers})</span>
                 <span className="font-bold font-mono text-emerald-400">
-                  {Math.round((totalOffers / totalApplied) * 100)}%
+                  {pctOfApplied(totalOffers)}%
                 </span>
               </div>
               <div className="w-full bg-slate-800 h-3 rounded-full overflow-hidden">
                 <div
                   className="bg-emerald-500 h-full rounded-full transition-all"
-                  style={{ width: `${Math.round((totalOffers / totalApplied) * 100)}%` }}
+                  style={{ width: `${pctOfApplied(totalOffers)}%` }}
                 />
               </div>
             </div>

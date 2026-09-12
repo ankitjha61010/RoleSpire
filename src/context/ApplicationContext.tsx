@@ -88,7 +88,7 @@ export const ApplicationProvider: React.FC<{ children: React.ReactNode }> = ({ c
       contactPerson: data.contactPerson,
       contactEmail: data.contactEmail,
       appliedAt: new Date().toISOString(),
-      matchScore: job?.matchScore?.totalScore || 85,
+      matchScore: job?.matchScore?.totalScore,
       notes: data.notes || '',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),

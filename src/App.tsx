@@ -29,6 +29,7 @@ import { Job, JobFilters, JobSortOption } from './types';
 import { jobAggregator } from './services/jobProviders/jobAggregator';
 import { CompanyProfilePage } from './pages/CompanyProfilePage';
 import { CompanyPage } from './pages/CompanyPage';
+import { CompanyRegisterPage } from './pages/CompanyRegisterPage';
 import { DerivedCompany, findDerivedCompany } from './services/companyDirectory';
 
 const MainApp: React.FC = () => {
@@ -39,6 +40,7 @@ const MainApp: React.FC = () => {
   const [viewingUserId, setViewingUserId] = useState<string | null>(null);
   const [selectedCompany, setSelectedCompany] = useState<DerivedCompany | null>(null);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(null);
+  const [companyPageOrigin, setCompanyPageOrigin] = useState<NavPage>('company-register');
 
   // Search & Filter State
   const [filters, setFilters] = useState<JobFilters>({});
@@ -168,6 +170,7 @@ const MainApp: React.FC = () => {
             onBack={() => setActivePage('community')}
             onSelectCompanyId={(id) => {
               setSelectedCompanyId(id);
+              setCompanyPageOrigin('user-profile');
               setActivePage('company-page');
             }}
           />
@@ -176,7 +179,18 @@ const MainApp: React.FC = () => {
         {activePage === 'company-page' && (
           <CompanyPage
             companyId={selectedCompanyId}
-            onBack={() => setActivePage('user-profile')}
+            onBack={() => setActivePage(companyPageOrigin)}
+          />
+        )}
+
+        {activePage === 'company-register' && (
+          <CompanyRegisterPage
+            onBack={() => setActivePage('profile')}
+            onManageCompany={(id) => {
+              setSelectedCompanyId(id);
+              setCompanyPageOrigin('company-register');
+              setActivePage('company-page');
+            }}
           />
         )}
 

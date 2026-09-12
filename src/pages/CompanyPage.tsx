@@ -11,9 +11,12 @@ import {
   Briefcase,
   Plus,
   IndianRupee,
+  Pencil,
+  Camera,
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import { useAuth } from '../context/AuthContext';
+import { uploadImage } from '../lib/storage';
 import { Company, EmploymentType, RemoteType } from '../types';
 
 interface CompanyPageProps {
@@ -46,6 +49,17 @@ const emptyJobForm = {
   applyUrl: '',
 };
 
+const toEditForm = (c: Partial<Company>) => ({
+  logoUrl: c.logoUrl || '',
+  coverImageUrl: c.coverImageUrl || '',
+  industry: c.industry || '',
+  hqLocation: c.hqLocation || '',
+  website: c.website || '',
+  about: c.about || '',
+  companySize: c.companySize || '',
+  foundedYear: c.foundedYear ? String(c.foundedYear) : '',
+});
+
 export const CompanyPage: React.FC<CompanyPageProps> = ({ companyId, onBack }) => {
   const { profile } = useAuth();
   const [company, setCompany] = useState<Company | null>(null);
@@ -57,6 +71,10 @@ export const CompanyPage: React.FC<CompanyPageProps> = ({ companyId, onBack }) =
   const [showJobForm, setShowJobForm] = useState(false);
   const [jobForm, setJobForm] = useState(emptyJobForm);
   const [isPosting, setIsPosting] = useState(false);
+  const [showEditForm, setShowEditForm] = useState(false);
+  const [editForm, setEditForm] = useState(toEditForm({}));
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState<'logo' | 'cover' | null>(null);
 
   const loadJobs = async () => {
     if (!supabase || !companyId) return;
@@ -100,7 +118,7 @@ export const CompanyPage: React.FC<CompanyPageProps> = ({ companyId, onBack }) =
       ]);
       if (cancelled) return;
       if (row) {
-        setCompany({
+        const loaded: Company = {
           id: row.id,
           slug: row.slug,
           name: row.name,
@@ -115,7 +133,9 @@ export const CompanyPage: React.FC<CompanyPageProps> = ({ companyId, onBack }) =
           createdBy: '',
           createdAt: '',
           updatedAt: '',
-        });
+        };
+        setCompany(loaded);
+        setEditForm(toEditForm(loaded));
       } else {
         setCompany(null);
       }
@@ -173,6 +193,52 @@ export const CompanyPage: React.FC<CompanyPageProps> = ({ companyId, onBack }) =
     navigator.clipboard?.writeText(window.location.href);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
+  };
+
+  const handleImageChange = (kind: 'logo' | 'cover') => async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !profile) return;
+    setIsUploadingImage(kind);
+    const result = await uploadImage('profile-media', profile.id, file, `company_${kind}`);
+    setEditForm((f) => ({ ...f, [kind === 'logo' ? 'logoUrl' : 'coverImageUrl']: result.url }));
+    setIsUploadingImage(null);
+  };
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!supabase || !company) return;
+    setIsSavingProfile(true);
+
+    const { error } = await supabase
+      .from('companies')
+      .update({
+        logo_url: editForm.logoUrl || null,
+        cover_image_url: editForm.coverImageUrl || null,
+        industry: editForm.industry.trim() || null,
+        hq_location: editForm.hqLocation.trim() || null,
+        website: editForm.website.trim() || null,
+        about: editForm.about.trim() || null,
+        company_size: editForm.companySize.trim() || null,
+        founded_year: editForm.foundedYear ? Number(editForm.foundedYear) : null,
+      })
+      .eq('id', company.id);
+
+    setIsSavingProfile(false);
+
+    if (!error) {
+      setCompany({
+        ...company,
+        logoUrl: editForm.logoUrl || undefined,
+        coverImageUrl: editForm.coverImageUrl || undefined,
+        industry: editForm.industry || undefined,
+        hqLocation: editForm.hqLocation || undefined,
+        website: editForm.website || undefined,
+        about: editForm.about || undefined,
+        companySize: editForm.companySize || undefined,
+        foundedYear: editForm.foundedYear ? Number(editForm.foundedYear) : undefined,
+      });
+      setShowEditForm(false);
+    }
   };
 
   if (isLoading) {
@@ -236,9 +302,17 @@ export const CompanyPage: React.FC<CompanyPageProps> = ({ companyId, onBack }) =
               {company.industry && <p className="text-xs sm:text-sm text-slate-400 mt-0.5">{company.industry}</p>}
             </div>
             {isAdmin && (
-              <span className="ml-auto text-[10px] font-bold px-2 py-1 rounded-lg bg-brand-500/15 text-brand-300 border border-brand-500/30 shrink-0 mb-1">
-                You're an admin
-              </span>
+              <div className="ml-auto flex items-center gap-2 shrink-0 mb-1">
+                <span className="text-[10px] font-bold px-2 py-1 rounded-lg bg-brand-500/15 text-brand-300 border border-brand-500/30">
+                  You're an admin
+                </span>
+                <button
+                  onClick={() => setShowEditForm((v) => !v)}
+                  className="text-[10px] font-bold px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white flex items-center gap-1 transition-all"
+                >
+                  <Pencil className="w-3 h-3" /> Edit Profile
+                </button>
+              </div>
             )}
           </div>
 
@@ -264,6 +338,51 @@ export const CompanyPage: React.FC<CompanyPageProps> = ({ companyId, onBack }) =
           </div>
         </div>
       </div>
+
+      {isAdmin && showEditForm && (
+        <form onSubmit={handleSaveProfile} className="glass-panel rounded-2xl p-6 border border-slate-800 space-y-3 text-xs">
+          <h3 className="text-sm font-bold text-white uppercase tracking-wider mb-1">Edit Company Profile</h3>
+
+          <div className="flex flex-wrap items-center gap-4">
+            <label className="relative w-16 h-16 rounded-xl bg-slate-900 border border-dashed border-slate-700 hover:border-brand-500/60 flex items-center justify-center shrink-0 cursor-pointer overflow-hidden transition-all">
+              {isUploadingImage === 'logo' ? (
+                <Loader2 className="w-4 h-4 text-brand-400 animate-spin" />
+              ) : editForm.logoUrl ? (
+                <img src={editForm.logoUrl} alt="Logo" className="w-full h-full object-cover" />
+              ) : (
+                <Camera className="w-5 h-5 text-slate-500" />
+              )}
+              <input type="file" accept="image/*" onChange={handleImageChange('logo')} className="hidden" />
+            </label>
+            <label className="relative flex-1 min-w-[160px] h-16 rounded-xl bg-slate-900 border border-dashed border-slate-700 hover:border-brand-500/60 flex items-center justify-center cursor-pointer overflow-hidden transition-all bg-cover bg-center" style={editForm.coverImageUrl ? { backgroundImage: `url(${editForm.coverImageUrl})` } : undefined}>
+              {isUploadingImage === 'cover' ? (
+                <Loader2 className="w-4 h-4 text-brand-400 animate-spin" />
+              ) : !editForm.coverImageUrl ? (
+                <span className="text-slate-500 flex items-center gap-1.5"><Camera className="w-4 h-4" /> Cover image</span>
+              ) : null}
+              <input type="file" accept="image/*" onChange={handleImageChange('cover')} className="hidden" />
+            </label>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <input placeholder="Industry" value={editForm.industry} onChange={(e) => setEditForm({ ...editForm, industry: e.target.value })} className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white" />
+            <input placeholder="HQ Location" value={editForm.hqLocation} onChange={(e) => setEditForm({ ...editForm, hqLocation: e.target.value })} className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white" />
+            <input placeholder="Website (https://...)" value={editForm.website} onChange={(e) => setEditForm({ ...editForm, website: e.target.value })} className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white" />
+            <input placeholder="Company size (e.g. 51-200)" value={editForm.companySize} onChange={(e) => setEditForm({ ...editForm, companySize: e.target.value })} className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white" />
+            <input type="number" placeholder="Founded year" value={editForm.foundedYear} onChange={(e) => setEditForm({ ...editForm, foundedYear: e.target.value })} className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white sm:col-span-2" />
+          </div>
+          <textarea placeholder="About the company" value={editForm.about} onChange={(e) => setEditForm({ ...editForm, about: e.target.value })} rows={4} className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white" />
+
+          <div className="flex items-center gap-2 pt-1">
+            <button type="submit" disabled={isSavingProfile} className="brand-gradient-btn text-white py-2 px-5 rounded-xl font-bold disabled:opacity-50">
+              {isSavingProfile ? 'Saving...' : 'Save Changes'}
+            </button>
+            <button type="button" onClick={() => { setEditForm(toEditForm(company)); setShowEditForm(false); }} className="py-2 px-4 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white font-semibold">
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
 
       {company.about && (
         <div className="glass-panel rounded-2xl p-6 border border-slate-800 space-y-3">

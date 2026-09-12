@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Building2, Globe, MapPin, Loader2, ArrowLeft, Plus, ShieldCheck } from 'lucide-react';
+import { Building2, Globe, MapPin, Loader2, ArrowLeft, Plus, ShieldCheck, Camera } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabaseClient';
+import { uploadImage } from '../lib/storage';
 
 interface CompanyRegisterPageProps {
   onBack: () => void;
@@ -23,6 +24,7 @@ const emptyForm = {
   about: '',
   companySize: '',
   foundedYear: '',
+  logoUrl: '',
 };
 
 export const CompanyRegisterPage: React.FC<CompanyRegisterPageProps> = ({ onBack, onManageCompany }) => {
@@ -33,6 +35,7 @@ export const CompanyRegisterPage: React.FC<CompanyRegisterPageProps> = ({ onBack
   const [form, setForm] = useState(emptyForm);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
 
   const loadMyCompanies = async () => {
     if (!supabase || !profile) {
@@ -71,6 +74,7 @@ export const CompanyRegisterPage: React.FC<CompanyRegisterPageProps> = ({ onBack
       .insert({
         name: form.name.trim(),
         slug,
+        logo_url: form.logoUrl || null,
         industry: form.industry.trim() || null,
         hq_location: form.hqLocation.trim() || null,
         website: form.website.trim() || null,
@@ -92,6 +96,15 @@ export const CompanyRegisterPage: React.FC<CompanyRegisterPageProps> = ({ onBack
     setForm(emptyForm);
     setShowForm(false);
     onManageCompany(data.id);
+  };
+
+  const handleLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !profile) return;
+    setIsUploadingLogo(true);
+    const result = await uploadImage('profile-media', profile.id, file, 'company_logo');
+    setForm((f) => ({ ...f, logoUrl: result.url }));
+    setIsUploadingLogo(false);
   };
 
   if (!isRealSession) {
@@ -161,6 +174,24 @@ export const CompanyRegisterPage: React.FC<CompanyRegisterPageProps> = ({ onBack
           ) : (
             <form onSubmit={handleRegister} className="glass-panel rounded-2xl p-6 border border-slate-800 space-y-3 text-xs">
               {error && <p className="text-rose-400">{error}</p>}
+
+              <div className="flex items-center gap-3">
+                <label className="relative w-14 h-14 rounded-xl bg-slate-900 border border-dashed border-slate-700 hover:border-brand-500/60 flex items-center justify-center shrink-0 cursor-pointer overflow-hidden transition-all">
+                  {isUploadingLogo ? (
+                    <Loader2 className="w-4 h-4 text-brand-400 animate-spin" />
+                  ) : form.logoUrl ? (
+                    <img src={form.logoUrl} alt="Logo" className="w-full h-full object-cover" />
+                  ) : (
+                    <Camera className="w-5 h-5 text-slate-500" />
+                  )}
+                  <input type="file" accept="image/*" onChange={handleLogoChange} className="hidden" />
+                </label>
+                <div className="text-slate-400 text-[11px]">
+                  <p className="font-semibold text-slate-300">Company logo</p>
+                  <p>Optional — helps your page stand out in search.</p>
+                </div>
+              </div>
+
               <input required placeholder="Company name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white" />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <input placeholder="Industry" value={form.industry} onChange={(e) => setForm({ ...form, industry: e.target.value })} className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-white" />
