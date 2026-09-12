@@ -1,13 +1,13 @@
-import React, { useState, useMemo } from 'react';
-import { 
-  Search, 
-  Sparkles, 
-  Filter, 
-  SlidersHorizontal, 
-  X, 
-  ChevronDown, 
-  Copy, 
-  Layers, 
+import React, { useEffect, useState, useMemo } from 'react';
+import {
+  Search,
+  Sparkles,
+  Filter,
+  SlidersHorizontal,
+  X,
+  ChevronDown,
+  Copy,
+  Layers,
   AlertCircle,
   CheckCircle2,
   RefreshCw,
@@ -18,23 +18,32 @@ import {
   UserCheck,
   Calendar,
   Wrench,
-  ExternalLink,
-  ShieldCheck,
-  Star,
   UserPlus,
   Clock,
   MessageSquare,
   Globe,
-  ArrowRight
+  ArrowRight,
+  ShieldCheck,
+  MapPin,
+  Landmark
 } from 'lucide-react';
 import { Job, JobFilters, JobSortOption, PostAuthor } from '../types';
 import { JobCard } from '../components/jobs/JobCard';
 import { JobFilterDrawer } from '../components/jobs/JobFilterDrawer';
 import { parseNaturalLanguageQuery, ParsedSearchQuery } from '../services/nlp/searchParser';
-import { CompanyData, MOCK_COMPANIES } from '../services/mockCompanies';
+import { DerivedCompany, deriveCompaniesFromJobs } from '../services/companyDirectory';
 import { useCommunity } from '../context/CommunityContext';
+import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabaseClient';
+import { lookupCompany, isCompanyRegistryConfigured, CompanyRegistryRecord } from '../services/companyRegistry';
 import { UserRoleBadge } from '../components/common/UserRoleBadge';
+import { ScrollablePaginatedList } from '../components/common/ScrollablePaginatedList';
 import confetti from 'canvas-confetti';
+
+const JOBS_PAGE_SIZE = 10;
+const COMPANIES_PAGE_SIZE = 10;
+const PEOPLE_PAGE_SIZE = 10;
+const POSTS_PAGE_SIZE = 10;
 
 export type SearchCategory = 'jobs' | 'people' | 'companies' | 'posts' | 'groups' | 'events' | 'services';
 
@@ -44,13 +53,12 @@ interface SearchPageProps {
   onUpdateFilters: (updated: Partial<JobFilters>) => void;
   onResetFilters: () => void;
   onSelectJob: (job: Job) => void;
-  onSelectCompany: (company: CompanyData) => void;
+  onSelectCompany: (company: DerivedCompany) => void;
   onSelectAuthor: (author: PostAuthor) => void;
   sortOption: JobSortOption;
   setSortOption: (sort: JobSortOption) => void;
   totalCount: number;
   duplicateCount: number;
-  isRealApiActive: boolean;
   isLoading: boolean;
 }
 
@@ -66,43 +74,28 @@ const SEARCH_CATEGORIES: { id: SearchCategory; label: string; icon: React.ReactN
 
 const SEARCH_SUGGESTIONS: Record<SearchCategory, string[]> = {
   jobs: [
-    'React Native in Ahmedabad',
+    'React Native remote roles',
+    'Senior Frontend Engineer',
     'Remote MERN jobs above ₹10 LPA',
-    'Senior Frontend at Stripe or Linear',
     'Python developer jobs posted today',
   ],
   people: [
-    'Priya Sharma Tech Recruiter',
-    'Rohit Verma React Native',
-    'Sarah Jenkins Stripe Talent',
-    'Arjun Mehta Staff Engineer',
+    'Tech Recruiter',
+    'Staff Engineer',
+    'React Native Developer',
+    'Engineering Manager',
   ],
   companies: [
-    'Razorpay',
-    'Linear',
-    'Swiggy',
-    'Stripe',
+    'Search a company name',
   ],
   posts: [
     'Remote React Native Referral',
     'MERN Stack Walkthrough & Tips',
     'System Design Mock Preparation',
   ],
-  groups: [
-    'React Native India Developers',
-    'Bangalore Tech Lead Circle',
-    'Remote First Global Engineers',
-  ],
-  events: [
-    'Bangalore Tech Hiring Summit 2026',
-    'Global React Summit Live',
-    'Fintech Engineering Hackathon',
-  ],
-  services: [
-    '1-on-1 Senior Staff Resume Review',
-    'React & System Design Mock Interview',
-    'Portfolio Architecture Review',
-  ],
+  groups: [],
+  events: [],
+  services: [],
 };
 
 export const SearchPage: React.FC<SearchPageProps> = ({
@@ -117,51 +110,117 @@ export const SearchPage: React.FC<SearchPageProps> = ({
   setSortOption,
   totalCount,
   duplicateCount,
-  isRealApiActive,
   isLoading,
 }) => {
   const { posts, getConnectionStatus, sendConnectionRequest } = useCommunity();
+  const { profile } = useAuth();
+  const [registeredUsers, setRegisteredUsers] = useState<PostAuthor[]>([]);
   const [activeCategory, setActiveCategory] = useState<SearchCategory>('jobs');
   const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
   const [queryInput, setQueryInput] = useState(filters.query || '');
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
   const [parsedMeta, setParsedMeta] = useState<ParsedSearchQuery | null>(null);
+  const [jobsPage, setJobsPage] = useState(1);
+  const [companiesPage, setCompaniesPage] = useState(1);
+  const [registryQuery, setRegistryQuery] = useState('');
+  const [registryResult, setRegistryResult] = useState<CompanyRegistryRecord | null>(null);
+  const [registryLoading, setRegistryLoading] = useState(false);
+  const [registryError, setRegistryError] = useState<string | null>(null);
+  const [registrySearched, setRegistrySearched] = useState(false);
 
-  // Filtered Companies
+  const handleRegistryLookup = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!registryQuery.trim()) return;
+    setRegistryLoading(true);
+    setRegistryError(null);
+    setRegistrySearched(true);
+    try {
+      const result = await lookupCompany(registryQuery);
+      setRegistryResult(result);
+    } catch (err: any) {
+      setRegistryError(err.message || 'Lookup failed. Please try again.');
+      setRegistryResult(null);
+    } finally {
+      setRegistryLoading(false);
+    }
+  };
+  const [peoplePage, setPeoplePage] = useState(1);
+  const [postsPage, setPostsPage] = useState(1);
+
+  // Real, cross-account directory of every signed-up user (name/headline/
+  // company/avatar only — everything else stays private via the DB view).
+  // Without this, "People" could only ever show authors of posts saved in
+  // *this browser's* local storage — other real accounts were invisible.
+  useEffect(() => {
+    if (!supabase) return;
+    let cancelled = false;
+
+    supabase
+      .from('public_profiles')
+      .select('id, full_name, headline, company, avatar_url')
+      .then(({ data, error }) => {
+        if (cancelled || error || !data) return;
+        const mapped: PostAuthor[] = data
+          .filter((row: any) => row.id !== profile?.id)
+          .map((row: any) => ({
+            id: row.id,
+            name: row.full_name || 'RoleSpire Member',
+            avatarUrl: row.avatar_url || undefined,
+            headline: row.headline || 'Job Seeker',
+            company: row.company || undefined,
+            role: 'job_seeker',
+            badgeStatus: 'none',
+          }));
+        setRegisteredUsers(mapped);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [profile?.id]);
+
+  // Reset to page 1 whenever the underlying result set changes
+  useEffect(() => {
+    setJobsPage(1);
+  }, [jobs, activeCategory]);
+
+  useEffect(() => {
+    setCompaniesPage(1);
+    setPeoplePage(1);
+    setPostsPage(1);
+  }, [queryInput, activeCategory]);
+
+  // Companies derived from real, live job listings — no fabricated employer data
   const companiesList = useMemo(() => {
-    const list = Object.values(MOCK_COMPANIES);
+    const list = deriveCompaniesFromJobs(jobs);
     if (!queryInput.trim()) return list;
     const q = queryInput.toLowerCase();
     return list.filter(
       (c) =>
         c.name.toLowerCase().includes(q) ||
-        c.industry.toLowerCase().includes(q) ||
-        c.about.toLowerCase().includes(q) ||
-        c.specialties.some((s) => s.toLowerCase().includes(q))
+        c.topSkills.some((s) => s.toLowerCase().includes(q))
     );
-  }, [queryInput]);
+  }, [jobs, queryInput]);
 
-  // People dataset gathered from mock companies and community posts
+  const pagedJobs = useMemo(
+    () => jobs.slice((jobsPage - 1) * JOBS_PAGE_SIZE, jobsPage * JOBS_PAGE_SIZE),
+    [jobs, jobsPage]
+  );
+  const totalJobsPages = Math.max(1, Math.ceil(jobs.length / JOBS_PAGE_SIZE));
+
+  const pagedCompanies = useMemo(
+    () => companiesList.slice((companiesPage - 1) * COMPANIES_PAGE_SIZE, companiesPage * COMPANIES_PAGE_SIZE),
+    [companiesList, companiesPage]
+  );
+  const totalCompaniesPages = Math.max(1, Math.ceil(companiesList.length / COMPANIES_PAGE_SIZE));
+
+  // People dataset: every real registered account, plus anyone who's posted
+  // in Community but might not have loaded into the directory yet.
   const peopleList = useMemo(() => {
     const peopleMap = new Map<string, PostAuthor>();
 
-    // Add company employees & recruiters
-    Object.values(MOCK_COMPANIES).forEach((c) => {
-      c.employees.forEach((emp) => {
-        peopleMap.set(emp.id, {
-          id: emp.id,
-          name: emp.name,
-          avatarUrl: emp.avatar,
-          headline: emp.headline,
-          company: c.name,
-          isRecruiter: emp.isRecruiter,
-          role: emp.isRecruiter ? 'recruiter' : 'job_seeker',
-          badgeStatus: emp.isHiring ? 'hiring' : 'open_to_work',
-        });
-      });
-    });
+    registeredUsers.forEach((u) => peopleMap.set(u.id, u));
 
-    // Add post authors
     posts.forEach((p) => {
       if (!peopleMap.has(p.author.id)) {
         peopleMap.set(p.author.id, p.author);
@@ -175,10 +234,16 @@ export const SearchPage: React.FC<SearchPageProps> = ({
       (p) =>
         p.name.toLowerCase().includes(q) ||
         p.headline.toLowerCase().includes(q) ||
-        p.company?.toLowerCase().includes(q) ||
-        p.role.toLowerCase().includes(q)
+        (p.company || '').toLowerCase().includes(q) ||
+        (p.role || '').toLowerCase().includes(q)
     );
-  }, [queryInput, posts]);
+  }, [queryInput, posts, registeredUsers]);
+
+  const pagedPeople = useMemo(
+    () => peopleList.slice((peoplePage - 1) * PEOPLE_PAGE_SIZE, peoplePage * PEOPLE_PAGE_SIZE),
+    [peopleList, peoplePage]
+  );
+  const totalPeoplePages = Math.max(1, Math.ceil(peopleList.length / PEOPLE_PAGE_SIZE));
 
   // Filtered Posts
   const postsList = useMemo(() => {
@@ -191,6 +256,12 @@ export const SearchPage: React.FC<SearchPageProps> = ({
         p.tags.some((t) => t.toLowerCase().includes(q))
     );
   }, [queryInput, posts]);
+
+  const pagedPosts = useMemo(
+    () => postsList.slice((postsPage - 1) * POSTS_PAGE_SIZE, postsPage * POSTS_PAGE_SIZE),
+    [postsList, postsPage]
+  );
+  const totalPostsPages = Math.max(1, Math.ceil(postsList.length / POSTS_PAGE_SIZE));
 
   // Handle Natural Language search trigger
   const handleSearchSubmit = (e?: React.FormEvent) => {
@@ -258,7 +329,7 @@ export const SearchPage: React.FC<SearchPageProps> = ({
       {/* Top Search & Category Selection Bar */}
       <div className="glass-panel rounded-3xl p-5 sm:p-7 border border-slate-800 shadow-xl space-y-4 relative z-30">
         <form onSubmit={handleSearchSubmit} className="relative flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-          
+
           {/* Category Dropdown (People, Companies, Jobs, Posts, Groups, Events, Services) */}
           <div className="relative z-50">
             <button
@@ -276,11 +347,11 @@ export const SearchPage: React.FC<SearchPageProps> = ({
             {isCategoryDropdownOpen && (
               <>
                 {/* Backdrop to close when clicking outside */}
-                <div 
-                  className="fixed inset-0 z-40" 
-                  onClick={() => setIsCategoryDropdownOpen(false)} 
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setIsCategoryDropdownOpen(false)}
                 />
-                
+
                 <div className="absolute left-0 top-full mt-2 w-64 glass-dropdown rounded-2xl p-2 z-50 animate-fadeIn space-y-1 shadow-2xl border border-slate-700">
                   <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-3 py-1.5">
                     Select Search Filter
@@ -293,11 +364,10 @@ export const SearchPage: React.FC<SearchPageProps> = ({
                         setActiveCategory(cat.id);
                         setIsCategoryDropdownOpen(false);
                       }}
-                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all text-left ${
-                        activeCategory === cat.id
+                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all text-left ${activeCategory === cat.id
                           ? 'bg-brand-500/20 text-brand-300 border border-brand-500/40'
                           : 'hover:bg-slate-800 text-slate-300 hover:text-white'
-                      }`}
+                        }`}
                     >
                       <span className={`p-1.5 rounded-lg ${activeCategory === cat.id ? 'bg-brand-500 text-white' : 'bg-slate-800 text-slate-400'}`}>
                         {cat.icon}
@@ -324,12 +394,12 @@ export const SearchPage: React.FC<SearchPageProps> = ({
                 activeCategory === 'jobs'
                   ? "Try 'Remote MERN jobs above ₹10 LPA' or 'React Native in Ahmedabad'..."
                   : activeCategory === 'companies'
-                  ? "Search companies by name, tech stack, or industry (e.g. 'Razorpay', 'Linear', 'Fintech')..."
-                  : activeCategory === 'people'
-                  ? "Find recruiters, engineers & mentors (e.g. 'Priya Sharma', 'React Native Recruiter')..."
-                  : activeCategory === 'posts'
-                  ? "Search community posts, questions, and job referrals..."
-                  : `Search ${activeCategoryObj.label}...`
+                    ? "Search companies by name or tech stack (e.g. 'Fintech', 'React')..."
+                    : activeCategory === 'people'
+                      ? "Find recruiters, engineers & mentors by name or role..."
+                      : activeCategory === 'posts'
+                        ? "Search community posts, questions, and job referrals..."
+                        : `Search ${activeCategoryObj.label}...`
               }
               className="w-full bg-slate-900 border border-slate-700 rounded-2xl pl-12 pr-10 py-3.5 text-xs sm:text-sm font-medium text-white placeholder-slate-400 focus:border-brand-500 focus:outline-none shadow-inner"
             />
@@ -365,11 +435,10 @@ export const SearchPage: React.FC<SearchPageProps> = ({
               key={cat.id}
               type="button"
               onClick={() => setActiveCategory(cat.id)}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all shrink-0 ${
-                activeCategory === cat.id
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all shrink-0 ${activeCategory === cat.id
                   ? 'bg-brand-500 text-white shadow-md'
                   : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800'
-              }`}
+                }`}
             >
               {cat.icon}
               <span>{cat.label}</span>
@@ -402,19 +471,21 @@ export const SearchPage: React.FC<SearchPageProps> = ({
         )}
 
         {/* Suggestions */}
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-slate-400 font-medium">Suggestions:</span>
-          {SEARCH_SUGGESTIONS[activeCategory].map((sug, i) => (
-            <button
-              key={i}
-              type="button"
-              onClick={() => handleApplySuggestion(sug)}
-              className="text-xs px-3 py-1 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 transition-all truncate"
-            >
-              {sug}
-            </button>
-          ))}
-        </div>
+        {SEARCH_SUGGESTIONS[activeCategory].length > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-slate-400 font-medium">Suggestions:</span>
+            {SEARCH_SUGGESTIONS[activeCategory].map((sug, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => handleApplySuggestion(sug)}
+                className="text-xs px-3 py-1 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 transition-all truncate"
+              >
+                {sug}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* RENDER CATEGORY VIEW 1: JOBS */}
@@ -438,11 +509,6 @@ export const SearchPage: React.FC<SearchPageProps> = ({
                 {duplicateCount > 0 && (
                   <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 text-[11px] font-mono flex items-center gap-1">
                     <Copy className="w-3 h-3 text-amber-400" /> {duplicateCount} duplicates grouped
-                  </span>
-                )}
-                {isRealApiActive && (
-                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[11px] font-mono font-semibold">
-                    Live API
                   </span>
                 )}
               </div>
@@ -499,11 +565,15 @@ export const SearchPage: React.FC<SearchPageProps> = ({
                 </button>
               </div>
             ) : (
-              <div className="space-y-4">
-                {jobs.map((job) => (
+              <ScrollablePaginatedList
+                currentPage={jobsPage}
+                totalPages={totalJobsPages}
+                onPageChange={setJobsPage}
+              >
+                {pagedJobs.map((job) => (
                   <JobCard key={job.id} job={job} onSelectJob={onSelectJob} />
                 ))}
-              </div>
+              </ScrollablePaginatedList>
             )}
           </div>
         </div>
@@ -515,84 +585,189 @@ export const SearchPage: React.FC<SearchPageProps> = ({
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
             <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
               <Building2 className="w-4 h-4 sm:w-5 sm:h-5 text-brand-400 shrink-0" />
-              <span>Verified Companies & Tech Employers ({companiesList.length})</span>
+              <span>Companies Actively Hiring ({companiesList.length})</span>
             </h2>
             <p className="text-[11px] sm:text-xs text-slate-400">
-              Click any company to open complete LinkedIn-style profile
+              Built live from current job listings
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {companiesList.map((comp) => (
-              <div
-                key={comp.id}
-                className="glass-panel rounded-3xl overflow-hidden border border-slate-800 hover:border-brand-500/40 transition-all hover:shadow-2xl flex flex-col justify-between group"
-              >
-                {/* Mini banner */}
-                <div className="h-24 w-full relative bg-slate-900 overflow-hidden">
-                  <img src={comp.bannerUrl} alt={comp.name} className="w-full h-full object-cover opacity-60 group-hover:scale-105 transition-transform duration-500" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent" />
-                </div>
+          {/* Official India Company Registry Lookup */}
+          <div className="glass-panel rounded-2xl p-5 border border-slate-800 space-y-3">
+            <div className="flex items-center gap-2">
+              <Landmark className="w-4 h-4 text-brand-400 shrink-0" />
+              <h3 className="text-sm font-bold text-white">Can't find a company above? Verify it in the official registry</h3>
+            </div>
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              The list above only shows companies currently hiring on live job boards. Any company registered in India — hiring or not —
+              can be looked up directly from the Ministry of Corporate Affairs' official records. This needs the exact registered legal
+              name (e.g. <span className="font-mono text-slate-300">KAMAL FINCAP PRIVATE LIMITED</span>) or its CIN — it can't fuzzy-search partial names.
+            </p>
 
-                <div className="p-6 pt-0 flex-1 flex flex-col justify-between space-y-4">
-                  <div>
-                    {/* Logo & Rating Header */}
-                    <div className="flex items-end justify-between -mt-10 mb-3">
-                      <div className="w-16 h-16 rounded-2xl bg-white border-2 border-slate-800 shadow-xl overflow-hidden shrink-0">
-                        <img src={comp.logo} alt={comp.name} className="w-full h-full object-cover" />
-                      </div>
-                      <span className="inline-flex items-center gap-1 text-xs text-amber-400 font-bold bg-amber-500/10 px-2.5 py-1 rounded-xl border border-amber-500/20">
-                        <Star className="w-3.5 h-3.5 fill-current" /> {comp.rating}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="text-lg font-extrabold text-white group-hover:text-brand-300 transition-colors">
-                        {comp.name}
-                      </h3>
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-brand-500/15 text-brand-300 text-[10px] font-semibold">
-                        <ShieldCheck className="w-3 h-3" /> Verified
-                      </span>
-                    </div>
-
-                    <p className="text-xs text-slate-300 font-medium mt-1 line-clamp-2">
-                      {comp.tagline}
-                    </p>
-
-                    <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400 mt-3">
-                      <span>📍 {comp.headquarters}</span>
-                      <span>👥 {comp.companySize}</span>
-                      <span className="text-emerald-400 font-bold">💼 {comp.activeJobsCount} Active Jobs</span>
-                    </div>
-
-                    {/* Specialties tags */}
-                    <div className="flex flex-wrap gap-1.5 mt-3">
-                      {comp.specialties.slice(0, 4).map((s) => (
-                        <span key={s} className="px-2 py-0.5 rounded-lg bg-slate-900 border border-slate-800 text-[11px] text-slate-300">
-                          {s}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Actions Bar */}
-                  <div className="pt-4 border-t border-slate-800 flex items-center justify-between gap-3">
-                    <span className="text-xs text-slate-400 font-medium">
-                      {comp.followersCount.toLocaleString()} followers
-                    </span>
-
-                    <button
-                      onClick={() => onSelectCompany(comp)}
-                      className="brand-gradient-btn text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md group-hover:scale-102 transition-transform"
-                    >
-                      <span>View Company</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
+            {!isCompanyRegistryConfigured ? (
+              <div className="text-[11px] text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-xl p-2.5">
+                Registry lookup isn't configured yet — add <span className="font-mono">VITE_DATA_GOV_IN_API_KEY</span> and{' '}
+                <span className="font-mono">VITE_DATA_GOV_IN_COMPANY_RESOURCE_ID</span> to your environment.
               </div>
-            ))}
+            ) : (
+              <form onSubmit={handleRegistryLookup} className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="text"
+                  value={registryQuery}
+                  onChange={(e) => setRegistryQuery(e.target.value)}
+                  placeholder="Exact registered name or CIN (e.g. XXXXXX PRIVATE LIMITED)"
+                  className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-brand-500"
+                />
+                <button
+                  type="submit"
+                  disabled={registryLoading}
+                  className="brand-gradient-btn text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-md disabled:opacity-60 shrink-0"
+                >
+                  <Search className="w-3.5 h-3.5" />
+                  <span>{registryLoading ? 'Looking up…' : 'Look Up'}</span>
+                </button>
+              </form>
+            )}
+
+            {registrySearched && !registryLoading && (
+              <div className="pt-2">
+                {registryError ? (
+                  <div className="text-[11px] text-rose-300 bg-rose-500/10 border border-rose-500/20 rounded-xl p-2.5">
+                    {registryError}
+                  </div>
+                ) : !registryResult ? (
+                  <div className="text-[11px] text-slate-400 bg-slate-900/60 border border-slate-800 rounded-xl p-2.5">
+                    No exact match found. Double-check the full legal name (including "Private Limited"/"Limited") or CIN, and try again.
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/[0.03] p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-3 flex-wrap">
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                          <h4 className="text-sm font-bold text-white">{registryResult.name}</h4>
+                        </div>
+                        <p className="text-[11px] text-slate-400 font-mono mt-0.5">{registryResult.cin}</p>
+                      </div>
+                      <span
+                        className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${registryResult.status.toLowerCase() === 'active'
+                            ? 'bg-emerald-500/20 text-emerald-300'
+                            : 'bg-slate-700 text-slate-300'
+                          }`}
+                      >
+                        {registryResult.status || 'Unknown'}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+                      <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800">
+                        <div className="text-slate-500 text-[10px] uppercase tracking-wider">Class / Category</div>
+                        <div className="text-slate-200 mt-0.5">{registryResult.companyClass || '—'} · {registryResult.category || '—'}</div>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800">
+                        <div className="text-slate-500 text-[10px] uppercase tracking-wider">Registered On</div>
+                        <div className="text-slate-200 mt-0.5">{registryResult.registrationDate || '—'}</div>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800">
+                        <div className="text-slate-500 text-[10px] uppercase tracking-wider">Authorized Capital</div>
+                        <div className="text-emerald-400 font-semibold mt-0.5">
+                          {registryResult.authorizedCapital ? `₹${Number(registryResult.authorizedCapital).toLocaleString('en-IN')}` : '—'}
+                        </div>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800">
+                        <div className="text-slate-500 text-[10px] uppercase tracking-wider">Paid-up Capital</div>
+                        <div className="text-emerald-400 font-semibold mt-0.5">
+                          {registryResult.paidupCapital ? `₹${Number(registryResult.paidupCapital).toLocaleString('en-IN')}` : '—'}
+                        </div>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 sm:col-span-2">
+                        <div className="text-slate-500 text-[10px] uppercase tracking-wider flex items-center gap-1">
+                          <MapPin className="w-3 h-3" /> Registered Office
+                        </div>
+                        <div className="text-slate-200 mt-0.5">{registryResult.registeredAddress || '—'}</div>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800">
+                        <div className="text-slate-500 text-[10px] uppercase tracking-wider">Industry (NIC)</div>
+                        <div className="text-slate-200 mt-0.5">{registryResult.industrialClassification || '—'} {registryResult.nicCode && `(${registryResult.nicCode})`}</div>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800">
+                        <div className="text-slate-500 text-[10px] uppercase tracking-wider">Registrar (RoC)</div>
+                        <div className="text-slate-200 mt-0.5">{registryResult.rocCode || '—'}</div>
+                      </div>
+                    </div>
+
+                    <p className="text-[10px] text-slate-500">
+                      Source: Ministry of Corporate Affairs, via data.gov.in — official company registry filing data.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
+
+          {companiesList.length === 0 ? (
+            <div className="glass-panel rounded-2xl p-8 text-center text-slate-400 border border-slate-800 text-xs">
+              No companies to show yet — try a broader search or check back once more listings load.
+            </div>
+          ) : (
+            <ScrollablePaginatedList
+              currentPage={companiesPage}
+              totalPages={totalCompaniesPages}
+              onPageChange={setCompaniesPage}
+              listClassName="grid grid-cols-1 md:grid-cols-2 gap-5"
+            >
+              {pagedCompanies.map((comp) => (
+                <div
+                  key={comp.name}
+                  className="glass-panel rounded-3xl overflow-hidden border border-slate-800 hover:border-brand-500/40 transition-all hover:shadow-2xl flex flex-col justify-between group"
+                >
+                  <div className="p-6 flex-1 flex flex-col justify-between space-y-4">
+                    <div>
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className="w-12 h-12 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center shrink-0 text-lg font-black text-brand-300">
+                          {comp.name.charAt(0).toUpperCase()}
+                        </div>
+                        <h3 className="text-lg font-extrabold text-white group-hover:text-brand-300 transition-colors truncate">
+                          {comp.name}
+                        </h3>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400 mt-1">
+                        {comp.locations.slice(0, 2).map((loc) => (
+                          <span key={loc}>📍 {loc}</span>
+                        ))}
+                        <span className="text-emerald-400 font-bold">💼 {comp.jobCount} Active Job{comp.jobCount === 1 ? '' : 's'}</span>
+                      </div>
+
+                      {/* Top skills */}
+                      <div className="flex flex-wrap gap-1.5 mt-3">
+                        {comp.topSkills.slice(0, 4).map((s) => (
+                          <span key={s} className="px-2 py-0.5 rounded-lg bg-slate-900 border border-slate-800 text-[11px] text-slate-300">
+                            {s}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Actions Bar */}
+                    <div className="pt-4 border-t border-slate-800 flex items-center justify-between gap-3">
+                      <span className="text-xs text-slate-400 font-medium">
+                        via {comp.sources.join(', ')}
+                      </span>
+
+                      <button
+                        onClick={() => onSelectCompany(comp)}
+                        className="brand-gradient-btn text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-md group-hover:scale-102 transition-transform"
+                      >
+                        <span>View Company</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </ScrollablePaginatedList>
+          )}
         </div>
       )}
 
@@ -609,79 +784,90 @@ export const SearchPage: React.FC<SearchPageProps> = ({
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {peopleList.map((p) => {
-              const connStatus = getConnectionStatus(p.id);
-              return (
-                <div
-                  key={p.id}
-                  className="glass-panel rounded-2xl p-5 border border-slate-800 hover:border-brand-500/40 transition-all flex flex-col justify-between space-y-4"
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="relative w-12 h-12 rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-center overflow-hidden shrink-0">
-                      <img src={p.avatarUrl} alt={p.name} className="w-full h-full object-cover" />
-                      {p.badgeStatus === 'hiring' && (
-                        <div className="absolute bottom-0 inset-x-0 bg-indigo-600 text-center text-[7px] font-black text-white py-0.2">
-                          HIRING
-                        </div>
-                      )}
-                      {p.badgeStatus === 'open_to_work' && (
-                        <div className="absolute bottom-0 inset-x-0 bg-emerald-600 text-center text-[7px] font-black text-white py-0.2">
-                          OPEN
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <h3
-                          onClick={() => onSelectAuthor(p)}
-                          className="font-bold text-white text-sm hover:text-brand-300 transition-colors cursor-pointer truncate"
-                        >
-                          {p.name}
-                        </h3>
-                        <UserRoleBadge role={p.role || (p.isRecruiter ? 'recruiter' : 'job_seeker')} badgeStatus={p.badgeStatus || 'none'} size="xs" />
+          {peopleList.length === 0 ? (
+            <div className="glass-panel rounded-2xl p-8 text-center text-slate-400 border border-slate-800 text-xs">
+              No people to show yet — connections and community posts will populate this list.
+            </div>
+          ) : (
+            <ScrollablePaginatedList
+              currentPage={peoplePage}
+              totalPages={totalPeoplePages}
+              onPageChange={setPeoplePage}
+              listClassName="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+            >
+              {pagedPeople.map((p) => {
+                const connStatus = getConnectionStatus(p.id);
+                return (
+                  <div
+                    key={p.id}
+                    className="glass-panel rounded-2xl p-5 border border-slate-800 hover:border-brand-500/40 transition-all flex flex-col justify-between space-y-4"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="relative w-12 h-12 rounded-2xl bg-slate-800 border border-slate-700 flex items-center justify-center overflow-hidden shrink-0">
+                        <img src={p.avatarUrl} alt={p.name} className="w-full h-full object-cover" />
+                        {p.badgeStatus === 'hiring' && (
+                          <div className="absolute bottom-0 inset-x-0 bg-indigo-600 text-center text-[7px] font-black text-white py-0.2">
+                            HIRING
+                          </div>
+                        )}
+                        {p.badgeStatus === 'open_to_work' && (
+                          <div className="absolute bottom-0 inset-x-0 bg-emerald-600 text-center text-[7px] font-black text-white py-0.2">
+                            OPEN
+                          </div>
+                        )}
                       </div>
 
-                      <p className="text-xs text-slate-300 font-medium truncate">{p.headline}</p>
-                      {p.company && <p className="text-[11px] text-brand-400 font-semibold truncate">@{p.company}</p>}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h3
+                            onClick={() => onSelectAuthor(p)}
+                            className="font-bold text-white text-sm hover:text-brand-300 transition-colors cursor-pointer truncate"
+                          >
+                            {p.name}
+                          </h3>
+                          <UserRoleBadge role={p.role || (p.isRecruiter ? 'recruiter' : 'job_seeker')} badgeStatus={p.badgeStatus || 'none'} size="xs" />
+                        </div>
+
+                        <p className="text-xs text-slate-300 font-medium truncate">{p.headline}</p>
+                        {p.company && <p className="text-[11px] text-brand-400 font-semibold truncate">@{p.company}</p>}
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-2 pt-3 border-t border-slate-800">
+                      {connStatus === 'accepted' ? (
+                        <span className="flex-1 py-1.5 text-center rounded-xl bg-emerald-500/10 text-emerald-400 text-xs font-semibold flex items-center justify-center gap-1">
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Connected
+                        </span>
+                      ) : connStatus === 'pending' ? (
+                        <span className="flex-1 py-1.5 text-center rounded-xl bg-amber-500/10 text-amber-400 text-xs font-semibold animate-pulse flex items-center justify-center gap-1">
+                          <Clock className="w-3.5 h-3.5" /> Pending...
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            sendConnectionRequest(p);
+                            confetti({ particleCount: 20, spread: 40 });
+                          }}
+                          className="flex-1 py-1.5 rounded-xl brand-gradient-btn text-white text-xs font-bold flex items-center justify-center gap-1 shadow-sm"
+                        >
+                          <UserPlus className="w-3.5 h-3.5" />
+                          <span>Connect</span>
+                        </button>
+                      )}
+
+                      <button
+                        onClick={() => onSelectAuthor(p)}
+                        className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-semibold transition-colors"
+                      >
+                        View Profile
+                      </button>
                     </div>
                   </div>
-
-                  {/* Actions */}
-                  <div className="flex items-center gap-2 pt-3 border-t border-slate-800">
-                    {connStatus === 'accepted' ? (
-                      <span className="flex-1 py-1.5 text-center rounded-xl bg-emerald-500/10 text-emerald-400 text-xs font-semibold flex items-center justify-center gap-1">
-                        <CheckCircle2 className="w-3.5 h-3.5" /> Connected
-                      </span>
-                    ) : connStatus === 'pending' ? (
-                      <span className="flex-1 py-1.5 text-center rounded-xl bg-amber-500/10 text-amber-400 text-xs font-semibold animate-pulse flex items-center justify-center gap-1">
-                        <Clock className="w-3.5 h-3.5" /> Pending...
-                      </span>
-                    ) : (
-                      <button
-                        onClick={() => {
-                          sendConnectionRequest(p);
-                          confetti({ particleCount: 20, spread: 40 });
-                        }}
-                        className="flex-1 py-1.5 rounded-xl brand-gradient-btn text-white text-xs font-bold flex items-center justify-center gap-1 shadow-sm"
-                      >
-                        <UserPlus className="w-3.5 h-3.5" />
-                        <span>Connect</span>
-                      </button>
-                    )}
-
-                    <button
-                      onClick={() => onSelectAuthor(p)}
-                      className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-xs font-semibold transition-colors"
-                    >
-                      View Profile
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </ScrollablePaginatedList>
+          )}
         </div>
       )}
 
@@ -693,33 +879,45 @@ export const SearchPage: React.FC<SearchPageProps> = ({
             <span>Community Posts & Referrals ({postsList.length})</span>
           </h2>
 
-          {postsList.map((post) => (
-            <div key={post.id} className="glass-panel rounded-2xl p-6 border border-slate-800 space-y-3">
-              <div className="flex items-center gap-3">
-                <img src={post.author.avatarUrl} alt={post.author.name} className="w-10 h-10 rounded-xl object-cover" />
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span 
-                      onClick={() => onSelectAuthor(post.author)}
-                      className="font-bold text-white text-sm hover:text-brand-300 cursor-pointer"
-                    >
-                      {post.author.name}
-                    </span>
-                    <UserRoleBadge role={post.author.role} badgeStatus={post.author.badgeStatus} size="xs" />
-                  </div>
-                  <span className="text-xs text-slate-400">{post.author.headline}</span>
-                </div>
-              </div>
-              <p className="text-xs sm:text-sm text-slate-200 whitespace-pre-wrap">{post.content}</p>
-              <div className="flex flex-wrap gap-1.5 pt-2">
-                {post.tags.map((t) => (
-                  <span key={t} className="px-2.5 py-0.5 rounded-lg bg-slate-900 border border-slate-800 text-brand-300 text-xs">
-                    #{t}
-                  </span>
-                ))}
-              </div>
+          {postsList.length === 0 ? (
+            <div className="glass-panel rounded-2xl p-8 text-center text-slate-400 border border-slate-800 text-xs">
+              No posts yet — be the first to share something in Community.
             </div>
-          ))}
+          ) : (
+            <ScrollablePaginatedList
+              currentPage={postsPage}
+              totalPages={totalPostsPages}
+              onPageChange={setPostsPage}
+            >
+              {pagedPosts.map((post) => (
+                <div key={post.id} className="glass-panel rounded-2xl p-6 border border-slate-800 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <img src={post.author.avatarUrl} alt={post.author.name} className="w-10 h-10 rounded-xl object-cover" />
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span
+                          onClick={() => onSelectAuthor(post.author)}
+                          className="font-bold text-white text-sm hover:text-brand-300 cursor-pointer"
+                        >
+                          {post.author.name}
+                        </span>
+                        <UserRoleBadge role={post.author.role} badgeStatus={post.author.badgeStatus} size="xs" />
+                      </div>
+                      <span className="text-xs text-slate-400">{post.author.headline}</span>
+                    </div>
+                  </div>
+                  <p className="text-xs sm:text-sm text-slate-200 whitespace-pre-wrap">{post.content}</p>
+                  <div className="flex flex-wrap gap-1.5 pt-2">
+                    {post.tags.map((t) => (
+                      <span key={t} className="px-2.5 py-0.5 rounded-lg bg-slate-900 border border-slate-800 text-brand-300 text-xs">
+                        #{t}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </ScrollablePaginatedList>
+          )}
         </div>
       )}
 
@@ -730,23 +928,8 @@ export const SearchPage: React.FC<SearchPageProps> = ({
             <UserCheck className="w-5 h-5 text-brand-400" />
             <span>Developer Communities & Groups</span>
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-            {[
-              { name: 'React Native India Engineers', members: '14,200', desc: 'Active discussions, offline meetups, and native bridges.' },
-              { name: 'Fintech Backend & Infra Circle', members: '8,900', desc: 'Distributed transactions, microservices, and payment engines.' },
-              { name: 'Remote Job Seekers Club', members: '24,500', desc: 'Daily referral leads, compensation transparent insights.' },
-            ].map((g, i) => (
-              <div key={i} className="glass-panel p-5 rounded-2xl border border-slate-800 space-y-3 flex flex-col justify-between">
-                <div>
-                  <h3 className="font-bold text-white text-sm">{g.name}</h3>
-                  <p className="text-xs text-slate-400 mt-1">{g.desc}</p>
-                  <div className="text-[11px] text-brand-400 font-semibold mt-2">👥 {g.members} members</div>
-                </div>
-                <button className="brand-gradient-btn text-white py-1.5 px-3 rounded-xl text-xs font-bold w-full">
-                  Join Group
-                </button>
-              </div>
-            ))}
+          <div className="glass-panel rounded-2xl p-8 text-center text-slate-400 border border-slate-800 text-xs">
+            Groups are coming soon. Check back once this feature is live.
           </div>
         </div>
       )}
@@ -758,22 +941,8 @@ export const SearchPage: React.FC<SearchPageProps> = ({
             <Calendar className="w-5 h-5 text-brand-400" />
             <span>Hiring Summits & Tech Events</span>
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {[
-              { title: 'Bangalore Tech Hiring Summit 2026', date: 'Oct 24, 2026', location: 'Online & Indiranagar, BLR', host: 'Razorpay & Zepto' },
-              { title: 'Global React & Next.js Architecture Summit', date: 'Nov 12, 2026', location: '100% Virtual / Stream', host: 'Linear Engineering' },
-            ].map((ev, i) => (
-              <div key={i} className="glass-panel p-6 rounded-2xl border border-slate-800 space-y-3">
-                <div className="flex items-center gap-2 text-xs text-brand-400 font-bold">
-                  <Calendar className="w-4 h-4" /> {ev.date}
-                </div>
-                <h3 className="font-extrabold text-white text-base">{ev.title}</h3>
-                <p className="text-xs text-slate-400">📍 {ev.location} • Hosted by {ev.host}</p>
-                <button className="brand-gradient-btn text-white py-2 px-4 rounded-xl text-xs font-bold">
-                  Register Free
-                </button>
-              </div>
-            ))}
+          <div className="glass-panel rounded-2xl p-8 text-center text-slate-400 border border-slate-800 text-xs">
+            No events to show right now. Check back soon.
           </div>
         </div>
       )}
@@ -785,23 +954,8 @@ export const SearchPage: React.FC<SearchPageProps> = ({
             <Wrench className="w-5 h-5 text-brand-400" />
             <span>Career Acceleration & Expert Services</span>
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {[
-              { title: 'Staff Engineer Resume Critique', price: '₹999 / $15', desc: 'Actionable ATS formatting and bullet point re-writes from verified hiring leads.' },
-              { title: 'Live 1-on-1 System Design Mock', price: '₹2,499 / $35', desc: '60-minute interactive whiteboarding session with feedback on distributed architectures.' },
-              { title: 'LinkedIn & RoleSpire Profile Polish', price: '₹1,499 / $20', desc: 'Optimize your bio, headline, and project tags to get 4x recruiter inbound queries.' },
-            ].map((serv, i) => (
-              <div key={i} className="glass-panel p-5 rounded-2xl border border-slate-800 space-y-3 flex flex-col justify-between">
-                <div>
-                  <h3 className="font-bold text-white text-sm">{serv.title}</h3>
-                  <p className="text-xs text-slate-400 mt-1 leading-relaxed">{serv.desc}</p>
-                  <div className="text-xs text-emerald-400 font-bold mt-2">{serv.price}</div>
-                </div>
-                <button className="brand-gradient-btn text-white py-1.5 px-3 rounded-xl text-xs font-bold w-full">
-                  Book Session
-                </button>
-              </div>
-            ))}
+          <div className="glass-panel rounded-2xl p-8 text-center text-slate-400 border border-slate-800 text-xs">
+            Expert services aren't available yet. Check back soon.
           </div>
         </div>
       )}

@@ -14,6 +14,7 @@ import { Job } from '../../types';
 import { useSavedJobs } from '../../context/SavedJobsContext';
 import { useJobComparison } from '../../context/ComparisonContext';
 import { useAuth } from '../../context/AuthContext';
+import { CompanyAvatar } from './CompanyAvatar';
 
 interface JobCardProps {
   job: Job;
@@ -192,11 +193,7 @@ export const JobCard: React.FC<JobCardProps> = ({ job, onSelectJob, onQuickApply
       <div className="cursor-pointer" onClick={() => onSelectJob(job)}>
         <div className="flex items-start gap-2.5 sm:gap-3 mb-2.5">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/80 flex items-center justify-center text-white font-bold text-xs shadow-sm shrink-0 overflow-hidden">
-            {job.companyLogo ? (
-              <img src={job.companyLogo} alt={job.company} className="w-full h-full object-cover" />
-            ) : (
-              <span>{job.company.slice(0, 2).toUpperCase()}</span>
-            )}
+            <CompanyAvatar logoUrl={job.companyLogo} companyName={job.company} />
           </div>
 
           <div className="flex-1 min-w-0 pr-1">

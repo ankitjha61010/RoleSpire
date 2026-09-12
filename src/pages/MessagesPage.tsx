@@ -24,7 +24,7 @@ interface MessagesPageProps {
 }
 
 export const MessagesPage: React.FC<MessagesPageProps> = ({ setActivePage }) => {
-  const { conversations, activeConversationId, setActiveConversationId, getMessages, sendMessage } = useChat();
+  const { conversations, activeConversationId, setActiveConversationId, getMessages, sendMessage, markConversationRead } = useChat();
   const { profile } = useAuth();
 
   const [inputMessage, setInputMessage] = useState('');
@@ -37,6 +37,13 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({ setActivePage }) => 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  useEffect(() => {
+    if (activeConv) {
+      markConversationRead(activeConv.id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeConv?.id]);
 
   const handleSend = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -73,6 +80,12 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({ setActivePage }) => 
 
           {/* List */}
           <div className="flex-1 overflow-y-auto divide-y divide-slate-800/60">
+            {conversations.length === 0 && (
+              <div className="p-6 text-center text-slate-400 text-xs space-y-1">
+                <p className="font-semibold text-slate-300">No conversations yet</p>
+                <p>Start a chat from a recruiter's profile or a community post to see it here.</p>
+              </div>
+            )}
             {conversations.map((conv) => {
               const isActive = conv.id === activeConversationId;
               return (
@@ -81,6 +94,7 @@ export const MessagesPage: React.FC<MessagesPageProps> = ({ setActivePage }) => 
                   onClick={() => {
                     setActiveConversationId(conv.id);
                     setShowMobileChat(true);
+                    markConversationRead(conv.id);
                   }}
                   className={`w-full p-3 flex items-start gap-2.5 text-left transition-all hover:bg-slate-900/80 ${
                     isActive ? 'bg-slate-900 border-l-2 border-brand-500' : ''

@@ -24,15 +24,17 @@ import { Job, SavedFolderType } from '../../types';
 import { useSavedJobs } from '../../context/SavedJobsContext';
 import { useJobComparison } from '../../context/ComparisonContext';
 import { useApplications } from '../../context/ApplicationContext';
+import { CompanyAvatar } from './CompanyAvatar';
 import confetti from 'canvas-confetti';
 
 interface JobDetailsModalProps {
   job: Job | null;
   onClose: () => void;
   onOpenCompare?: () => void;
+  onSelectCompany?: (companyName: string) => void;
 }
 
-export const JobDetailsModal: React.FC<JobDetailsModalProps> = ({ job, onClose, onOpenCompare }) => {
+export const JobDetailsModal: React.FC<JobDetailsModalProps> = ({ job, onClose, onOpenCompare, onSelectCompany }) => {
   const { isJobSaved, saveJob, removeSavedJob } = useSavedJobs();
   const { isJobInComparison, addJobToCompare, removeJobFromCompare } = useJobComparison();
   const { applications, createApplication } = useApplications();
@@ -139,18 +141,23 @@ export const JobDetailsModal: React.FC<JobDetailsModalProps> = ({ job, onClose, 
         <div className="flex flex-col md:flex-row items-start justify-between gap-6 mb-8">
           <div className="flex items-start gap-4">
             <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 flex items-center justify-center text-white font-bold text-xl shadow-lg shrink-0 overflow-hidden">
-              {job.companyLogo ? (
-                <img src={job.companyLogo} alt={job.company} className="w-full h-full object-cover" />
-              ) : (
-                <span>{job.company.slice(0, 2).toUpperCase()}</span>
-              )}
+              <CompanyAvatar logoUrl={job.companyLogo} companyName={job.company} />
             </div>
             <div>
               <h1 className="text-xl sm:text-2xl font-extrabold text-white leading-tight">
                 {job.title}
               </h1>
               <div className="flex flex-wrap items-center gap-2.5 mt-1.5 text-sm text-slate-300">
-                <span className="font-bold text-brand-300">{job.company}</span>
+                {onSelectCompany ? (
+                  <button
+                    onClick={() => onSelectCompany(job.company)}
+                    className="font-bold text-brand-300 hover:text-brand-200 hover:underline transition-colors"
+                  >
+                    {job.company}
+                  </button>
+                ) : (
+                  <span className="font-bold text-brand-300">{job.company}</span>
+                )}
                 {job.companyDomain && (
                   <span className="text-xs text-slate-400 font-mono">({job.companyDomain})</span>
                 )}

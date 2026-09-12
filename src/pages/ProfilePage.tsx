@@ -223,7 +223,7 @@ export const ProfilePage: React.FC = () => {
                   type="text"
                   value={company}
                   onChange={(e) => setCompany(e.target.value)}
-                  placeholder="e.g. Razorpay, Swiggy, Linear"
+                  placeholder="e.g. Google, Stripe"
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-brand-500 font-medium"
                 />
               </div>

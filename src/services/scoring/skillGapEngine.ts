@@ -18,10 +18,11 @@ export function analyzeSkillGap(job: Job, profile: UserProfile | null): SkillGap
 
   const userSkillMap = new Map<string, string>();
   profile.skills.forEach((s) => {
+    if (!s.name) return;
     userSkillMap.set(s.name.toLowerCase().trim(), s.name);
   });
 
-  const jobSkills = job.skills || [];
+  const jobSkills = (job.skills || []).filter(Boolean);
   const matchedSkills: string[] = [];
   const missingSkills: string[] = [];
 
@@ -44,7 +45,7 @@ export function analyzeSkillGap(job: Job, profile: UserProfile | null): SkillGap
 
   // Additional skills the user has that aren't strictly required
   const additionalSkills = profile.skills
-    .filter((s) => !matchedSkills.includes(s.name))
+    .filter((s) => s.name && !matchedSkills.includes(s.name))
     .map((s) => s.name);
 
   const totalRequired = jobSkills.length;

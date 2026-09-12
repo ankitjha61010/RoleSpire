@@ -1,26 +1,17 @@
 import React, { useState } from 'react';
-import { 
-  ArrowLeft, 
-  Building2, 
-  MapPin, 
-  Briefcase, 
-  ShieldCheck, 
-  Award, 
-  MessageCircle, 
-  UserPlus, 
-  Clock, 
-  Check, 
-  ExternalLink, 
-  Globe, 
-  Sparkles, 
-  Share2, 
-  Calendar, 
-  Users, 
-  CheckCircle2, 
+import {
+  ArrowLeft,
+  Building2,
+  MessageCircle,
+  UserPlus,
+  Clock,
+  Check,
+  Sparkles,
+  Share2,
+  CheckCircle2,
   Heart,
   MessageSquare,
   FileText,
-  Star
 } from 'lucide-react';
 import { PostAuthor, CommunityPost } from '../types';
 import { useCommunity } from '../context/CommunityContext';
@@ -39,7 +30,7 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({ author, onBack
   const { startChatWithUser } = useChat();
   const { profile } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'experience' | 'skills' | 'activity'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'activity'>('overview');
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
   const [copiedLink, setCopiedLink] = useState(false);
 
@@ -77,7 +68,7 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({ author, onBack
       avatarUrl: author.avatarUrl,
       headline: author.headline,
       company: author.company || 'Tech Leader',
-      isOnline: true,
+      isOnline: false,
     });
   };
 
@@ -87,43 +78,7 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({ author, onBack
     setTimeout(() => setCopiedLink(false), 2500);
   };
 
-  // Bio & stats
-  const isRecruiter = author.isRecruiter;
-  const userBio = isRecruiter
-    ? `Leading tech talent acquisition and hiring initiatives across distributed product teams. Partnering directly with hiring managers to hire top 1% Frontend, Backend, AI/ML, and Mobile Engineers for high-scale platforms.`
-    : `Principal & Staff-level software engineer passionate about modern frontend systems, TypeScript architecture, high-performance web applications, and developer productivity. Active tech mentor and open-source contributor.`;
-
-  const userSkills = isRecruiter
-    ? ['Technical Recruiting', 'Executive Talent Sourcing', 'Engineering Hiring', 'Salary Benchmarking', 'Candidate Experience', 'Talent Pipelines', 'Leadership Search']
-    : ['React 19 & Next.js', 'TypeScript', 'Node.js', 'System Architecture', 'GraphQL & REST', 'State Management', 'Vite & Webpack', 'Real-time WebSockets', 'Tailwind CSS'];
-
-  const experienceHistory = [
-    {
-      role: author.headline || (isRecruiter ? 'Lead Tech Recruiter' : 'Staff Frontend Engineer'),
-      company: author.company || (isRecruiter ? 'Nexus Tech Talent' : 'High-Scale Tech Unicorn'),
-      period: '2023 - Present (1.5+ yrs)',
-      location: 'Bangalore / Remote',
-      description: isRecruiter
-        ? 'Spearheading hiring pipelines for core engineering pods. Scaled engineering teams from 20 to 80+ engineers with 94% retention.'
-        : 'Architecting next-generation frontend platform serving 4M+ daily active users. Improved Core Web Vitals LCP by 42% and introduced micro-frontend modules.',
-    },
-    {
-      role: isRecruiter ? 'Senior Talent Partner' : 'Senior Software Engineer',
-      company: 'Series B FinTech Platform',
-      period: '2021 - 2023 (2 yrs)',
-      location: 'Hyderabad / Hybrid',
-      description: isRecruiter
-        ? 'Managed full-cycle recruitment for backend distributed systems, DevOps, and cloud infrastructure roles.'
-        : 'Built high-throughput payment checkout flows and design system component libraries with 99.9% uptime reliability.',
-    },
-    {
-      role: isRecruiter ? 'Talent Acquisition Specialist' : 'Frontend Engineer',
-      company: 'Global Digital Agency',
-      period: '2019 - 2021 (2 yrs)',
-      location: 'Remote',
-      description: 'Collaborated with cross-functional product designers and backend teams to deliver scalable digital experiences for Fortune 500 clients.',
-    }
-  ];
+  const userBio = `${author.headline}${author.company ? ` at ${author.company}` : ''}.`;
 
   const authorPosts = posts.filter(p => p.author.id === author.id);
 
@@ -170,8 +125,6 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({ author, onBack
               ) : (
                 <span>{author.name.charAt(0)}</span>
               )}
-              {/* Online Indicator Badge */}
-              <div className="absolute bottom-2 right-2 w-4 h-4 rounded-full bg-emerald-500 border-2 border-slate-900 shadow-sm" title="Active in Community" />
 
               {/* Status Ribbon on Avatar Bottom */}
               {author.badgeStatus && author.badgeStatus !== 'none' && (
@@ -250,18 +203,6 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({ author, onBack
                   <span className="font-semibold">{author.company}</span>
                 </div>
               )}
-              <div className="flex items-center gap-1.5">
-                <MapPin className="w-4 h-4 text-slate-500" />
-                <span>Bangalore, India (Open to Remote)</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Users className="w-4 h-4 text-slate-500" />
-                <span>500+ Connections</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Calendar className="w-4 h-4 text-slate-500" />
-                <span>Joined Community Nov 2024</span>
-              </div>
             </div>
           </div>
         </div>
@@ -278,30 +219,6 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({ author, onBack
           >
             <Sparkles className="w-3.5 h-3.5" />
             <span>Overview & Bio</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('experience')}
-            className={`py-3.5 text-xs sm:text-sm font-semibold border-b-2 transition-all shrink-0 flex items-center gap-1.5 ${
-              activeTab === 'experience'
-                ? 'border-brand-500 text-brand-400'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Briefcase className="w-3.5 h-3.5" />
-            <span>Experience & Timeline</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('skills')}
-            className={`py-3.5 text-xs sm:text-sm font-semibold border-b-2 transition-all shrink-0 flex items-center gap-1.5 ${
-              activeTab === 'skills'
-                ? 'border-brand-500 text-brand-400'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Award className="w-3.5 h-3.5" />
-            <span>Verified Skills</span>
           </button>
 
           <button
@@ -331,35 +248,6 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({ author, onBack
               <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-line">
                 {userBio}
               </p>
-            </div>
-
-            {/* Verified Credentials & Stats */}
-            <div className="glass-panel rounded-2xl p-6 border border-slate-800 space-y-4">
-              <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                <Award className="w-4 h-4 text-purple-400" />
-                <span>Highlights & Badges</span>
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 flex items-start gap-3">
-                  <div className="p-2 rounded-lg bg-brand-500/10 text-brand-400">
-                    <ShieldCheck className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-white">Identity Verified</h4>
-                    <p className="text-[11px] text-slate-400 mt-0.5">Work email & corporate domain confirmed</p>
-                  </div>
-                </div>
-
-                <div className="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800 flex items-start gap-3">
-                  <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-400">
-                    <Star className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-white">High Referral Rate</h4>
-                    <p className="text-[11px] text-slate-400 mt-0.5">Helped 14+ members secure interviews</p>
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
 
@@ -406,78 +294,6 @@ export const UserProfilePage: React.FC<UserProfilePageProps> = ({ author, onBack
                 <span>Start Direct Message</span>
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Tab Content: Experience */}
-      {activeTab === 'experience' && (
-        <div className="glass-panel rounded-2xl p-6 border border-slate-800 space-y-6">
-          <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <Briefcase className="w-4 h-4 text-brand-400" />
-            <span>Career Experience & History</span>
-          </h3>
-
-          <div className="space-y-6 relative before:absolute before:inset-0 before:left-3.5 before:w-0.5 before:bg-slate-800">
-            {experienceHistory.map((exp, idx) => (
-              <div key={idx} className="relative pl-8 space-y-1.5 group">
-                {/* Timeline Dot */}
-                <div className="absolute left-2 top-1.5 w-3.5 h-3.5 rounded-full bg-slate-900 border-2 border-brand-500 group-hover:scale-125 transition-transform" />
-
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                  <h4 className="text-sm font-bold text-white group-hover:text-brand-300 transition-colors">
-                    {exp.role}
-                  </h4>
-                  <span className="text-[11px] font-mono text-slate-400">
-                    {exp.period}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-2 text-xs text-brand-400 font-medium">
-                  <Building2 className="w-3.5 h-3.5" />
-                  <span>{exp.company}</span>
-                  <span className="text-slate-600">•</span>
-                  <span className="text-slate-400">{exp.location}</span>
-                </div>
-
-                <p className="text-xs text-slate-300 pt-1 leading-relaxed">
-                  {exp.description}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Tab Content: Skills */}
-      {activeTab === 'skills' && (
-        <div className="glass-panel rounded-2xl p-6 border border-slate-800 space-y-6">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-              <Award className="w-4 h-4 text-purple-400" />
-              <span>Verified Skills & Competencies</span>
-            </h3>
-            <span className="text-xs text-slate-400 font-medium">{userSkills.length} Verified Endorsements</span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-            {userSkills.map((skill, i) => (
-              <div
-                key={i}
-                className="p-3.5 rounded-xl bg-slate-900/70 border border-slate-800 hover:border-brand-500/40 transition-all flex items-center justify-between group"
-              >
-                <div className="flex items-center gap-2.5">
-                  <div className="w-2 h-2 rounded-full bg-brand-400 group-hover:scale-150 transition-transform" />
-                  <span className="text-xs font-semibold text-slate-200 group-hover:text-white">
-                    {skill}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md font-medium">
-                  <Check className="w-3 h-3" />
-                  <span>Endorsed</span>
-                </div>
-              </div>
-            ))}
           </div>
         </div>
       )}

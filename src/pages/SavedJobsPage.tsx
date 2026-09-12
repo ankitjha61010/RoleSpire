@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { 
   Bookmark, 
   FolderPlus, 
@@ -16,6 +16,9 @@ import { Job, SavedFolderType } from '../types';
 import { useSavedJobs } from '../context/SavedJobsContext';
 import { JobCard } from '../components/jobs/JobCard';
 import { NavPage } from '../components/layout/Navbar';
+import { ScrollablePaginatedList } from '../components/common/ScrollablePaginatedList';
+
+const SAVED_PAGE_SIZE = 10;
 
 interface SavedJobsPageProps {
   allJobs: Job[];
@@ -56,6 +59,17 @@ export const SavedJobsPage: React.FC<SavedJobsPageProps> = ({
       record: rec,
     }))
     .filter((item): item is { job: Job; record: typeof item.record } => item.job !== undefined);
+
+  const [savedPage, setSavedPage] = useState(1);
+  useEffect(() => {
+    setSavedPage(1);
+  }, [activeFolder]);
+
+  const totalSavedPages = Math.max(1, Math.ceil(savedJobsWithRecords.length / SAVED_PAGE_SIZE));
+  const pagedSavedJobs = useMemo(
+    () => savedJobsWithRecords.slice((savedPage - 1) * SAVED_PAGE_SIZE, savedPage * SAVED_PAGE_SIZE),
+    [savedJobsWithRecords, savedPage]
+  );
 
   const handleCreateFolder = (e: React.FormEvent) => {
     e.preventDefault();
@@ -176,11 +190,11 @@ export const SavedJobsPage: React.FC<SavedJobsPageProps> = ({
           </button>
         </div>
       ) : (
-        <div className="space-y-4">
-          {savedJobsWithRecords.map(({ job, record }) => (
+        <ScrollablePaginatedList currentPage={savedPage} totalPages={totalSavedPages} onPageChange={setSavedPage}>
+          {pagedSavedJobs.map(({ job, record }) => (
             <div key={job.id} className="space-y-2">
               <JobCard job={job} onSelectJob={onSelectJob} />
-              
+
               {/* Optional Custom Note Banner */}
               {record.notes && (
                 <div className="px-5 py-2.5 rounded-2xl bg-slate-900/80 border border-slate-800 flex items-center gap-2 text-xs text-slate-300">
@@ -191,7 +205,7 @@ export const SavedJobsPage: React.FC<SavedJobsPageProps> = ({
               )}
             </div>
           ))}
-        </div>
+        </ScrollablePaginatedList>
       )}
 
       {/* New Folder Modal */}

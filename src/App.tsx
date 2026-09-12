@@ -27,7 +27,7 @@ import { FloatingChatWidget } from './components/chat/FloatingChatWidget';
 import { Job, JobFilters, JobSortOption, PostAuthor } from './types';
 import { jobAggregator } from './services/jobProviders/jobAggregator';
 import { CompanyProfilePage } from './pages/CompanyProfilePage';
-import { CompanyData, MOCK_COMPANIES } from './services/mockCompanies';
+import { DerivedCompany, findDerivedCompany } from './services/companyDirectory';
 
 const MainApp: React.FC = () => {
   const { profile } = useAuth();
@@ -35,7 +35,7 @@ const MainApp: React.FC = () => {
   const [activePage, setActivePage] = useState<NavPage>('home');
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [viewingAuthor, setViewingAuthor] = useState<PostAuthor | null>(null);
-  const [selectedCompany, setSelectedCompany] = useState<CompanyData | null>(null);
+  const [selectedCompany, setSelectedCompany] = useState<DerivedCompany | null>(null);
 
   // Search & Filter State
   const [filters, setFilters] = useState<JobFilters>({});
@@ -44,26 +44,34 @@ const MainApp: React.FC = () => {
   // Aggregated Jobs State
   const [jobs, setJobs] = useState<Job[]>([]);
   const [duplicateCount, setDuplicateCount] = useState(0);
-  const [isRealApiActive, setIsRealApiActive] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   // Fetch / Score Jobs on filter or profile change
   useEffect(() => {
+    let isStale = false;
+
     async function loadJobs() {
       setIsLoading(true);
       try {
         const result = await jobAggregator.searchJobs(filters, profile, sortOption);
+        // If the filters/profile/sort changed again while this request was in
+        // flight, a newer effect run has already taken over — applying this
+        // now-stale response would silently clobber the correct, newer result.
+        if (isStale) return;
         setJobs(result.jobs);
         setDuplicateCount(result.duplicateCount);
-        setIsRealApiActive(result.isRealApiActive);
       } catch (err) {
-        console.error('Error querying job aggregator:', err);
+        if (!isStale) console.error('Error querying job aggregator:', err);
       } finally {
-        setIsLoading(false);
+        if (!isStale) setIsLoading(false);
       }
     }
 
     loadJobs();
+
+    return () => {
+      isStale = true;
+    };
   }, [filters, profile, sortOption]);
 
   const handleUpdateFilters = (updated: Partial<JobFilters>) => {
@@ -72,6 +80,14 @@ const MainApp: React.FC = () => {
 
   const handleResetFilters = () => {
     setFilters({});
+  };
+
+  const handleSelectCompanyByName = (companyName: string) => {
+    const company = findDerivedCompany(jobs, companyName);
+    if (!company) return;
+    setSelectedCompany(company);
+    setSelectedJob(null);
+    setActivePage('company-profile');
   };
 
   return (
@@ -84,6 +100,7 @@ const MainApp: React.FC = () => {
         {activePage === 'home' && (
           <HomePage
             jobs={jobs}
+            isLoading={isLoading}
             onSelectJob={(j) => setSelectedJob(j)}
             setActivePage={setActivePage}
             onSearchWithFilters={(f) => {
@@ -111,7 +128,6 @@ const MainApp: React.FC = () => {
             setSortOption={setSortOption}
             totalCount={jobs.length}
             duplicateCount={duplicateCount}
-            isRealApiActive={isRealApiActive}
             isLoading={isLoading}
           />
         )}
@@ -119,19 +135,15 @@ const MainApp: React.FC = () => {
         {activePage === 'company-profile' && (
           <CompanyProfilePage
             company={selectedCompany}
-            allJobs={jobs}
             onBack={() => setActivePage('search')}
             onSelectJob={(j) => setSelectedJob(j)}
-            onSelectAuthor={(author) => {
-              setViewingAuthor(author);
-              setActivePage('user-profile');
-            }}
           />
         )}
 
         {activePage === 'foryou' && (
           <ForYouPage
             jobs={jobs}
+            isLoading={isLoading}
             onSelectJob={(j) => setSelectedJob(j)}
             setActivePage={setActivePage}
           />
@@ -197,6 +209,7 @@ const MainApp: React.FC = () => {
         job={selectedJob}
         onClose={() => setSelectedJob(null)}
         onOpenCompare={() => setActivePage('compare')}
+        onSelectCompany={handleSelectCompanyByName}
       />
     </div>
   );

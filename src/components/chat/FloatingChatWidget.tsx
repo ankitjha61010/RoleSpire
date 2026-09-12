@@ -16,7 +16,7 @@ import { useAuth } from '../../context/AuthContext';
 import { UserRoleBadge } from '../common/UserRoleBadge';
 
 export const FloatingChatWidget: React.FC = () => {
-  const { conversations, activeConversationId, setActiveConversationId, getMessages, sendMessage, totalUnreadCount } = useChat();
+  const { conversations, activeConversationId, setActiveConversationId, getMessages, sendMessage, markConversationRead, totalUnreadCount } = useChat();
   const { profile } = useAuth();
 
   const [isOpen, setIsOpen] = useState(false);
@@ -132,12 +132,20 @@ export const FloatingChatWidget: React.FC = () => {
                 </span>
               </div>
 
+              {conversations.length === 0 && (
+                <div className="p-6 text-center text-slate-400 text-xs space-y-1">
+                  <p className="font-semibold text-slate-300">No conversations yet</p>
+                  <p>Connect with a recruiter or peer to start chatting.</p>
+                </div>
+              )}
+
               {conversations.map((conv) => (
                 <button
                   key={conv.id}
                   onClick={() => {
                     setSelectedConvId(conv.id);
                     setActiveConversationId(conv.id);
+                    markConversationRead(conv.id);
                   }}
                   className="w-full p-3 flex items-start gap-2.5 text-left hover:bg-slate-850 transition-colors"
                 >

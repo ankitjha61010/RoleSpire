@@ -1,19 +1,24 @@
 import { Job } from '../../types';
 
-function normalizeString(str: string): string {
-  return str
+function normalizeString(str: string | undefined | null): string {
+  return (str || '')
     .toLowerCase()
     .replace(/[^a-z0-9]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
+// Boilerplate gender/diversity qualifiers common in job titles that inflate
+// word-overlap similarity without indicating the postings are actually the
+// same role (e.g. "Griller (all genders)" vs "Zapfer (all genders)").
+const TITLE_FILLER_WORDS = new Set(['m', 'w', 'd', 'f', 'x', 'all', 'genders', 'gender']);
+
 /**
  * Calculates string similarity using Jaccard index on word n-grams
  */
 function calculateTextSimilarity(a: string, b: string): number {
-  const wordsA = new Set(normalizeString(a).split(' '));
-  const wordsB = new Set(normalizeString(b).split(' '));
+  const wordsA = new Set(normalizeString(a).split(' ').filter((w) => !TITLE_FILLER_WORDS.has(w)));
+  const wordsB = new Set(normalizeString(b).split(' ').filter((w) => !TITLE_FILLER_WORDS.has(w)));
 
   if (wordsA.size === 0 || wordsB.size === 0) return 0;
 
@@ -49,8 +54,10 @@ export function clusterAndDeduplicateJobs(jobs: Job[]): {
       const companyB = normalizeString(jobB.company);
       const titleB = normalizeString(jobB.title);
 
-      // Check if companies are identical or very close
-      const isSameCompany = companyA === companyB || companyA.includes(companyB) || companyB.includes(companyA);
+      // Check if companies are identical after normalization. A loose substring
+      // check here (e.g. "AB".includes("A")) produces massive false positives
+      // once the pool has hundreds of differently-named companies.
+      const isSameCompany = companyA === companyB && companyA.length > 0;
 
       if (isSameCompany) {
         const titleSim = calculateTextSimilarity(titleA, titleB);
@@ -58,7 +65,7 @@ export function clusterAndDeduplicateJobs(jobs: Job[]): {
         const locB = normalizeString(jobB.location);
         const isSameLoc = locA === locB || jobA.remoteType === jobB.remoteType;
 
-        if (titleSim > 0.65 && isSameLoc) {
+        if (titleSim > 0.75 && isSameLoc) {
           const clusterId = jobA.duplicateClusterId || `cluster_${jobA.id}`;
           jobA.duplicateClusterId = clusterId;
           jobB.duplicateClusterId = clusterId;

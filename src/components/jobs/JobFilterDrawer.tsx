@@ -12,6 +12,7 @@ import {
   X 
 } from 'lucide-react';
 import { JobFilters, JobSource, RemoteType } from '../../types';
+import { LOCATION_OPTIONS, WORLDWIDE_LOCATION } from '../../constants/indiaLocations';
 
 interface JobFilterDrawerProps {
   filters: JobFilters;
@@ -47,10 +48,9 @@ export const JobFilterDrawer: React.FC<JobFilterDrawerProps> = ({
 
   const sourceOptions: { id: JobSource | 'all'; label: string }[] = [
     { id: 'all', label: 'All Sources' },
-    { id: 'direct', label: 'Direct Apply' },
     { id: 'adzuna', label: 'Adzuna API' },
-    { id: 'greenhouse', label: 'Greenhouse' },
-    { id: 'lever', label: 'Lever' },
+    { id: 'remotive', label: 'Remotive API' },
+    { id: 'arbeitnow', label: 'Arbeitnow API' },
   ];
 
   const content = (
@@ -106,7 +106,28 @@ export const JobFilterDrawer: React.FC<JobFilterDrawerProps> = ({
         </label>
       </div>
 
-      {/* 2. Remote Work Style */}
+      {/* 2. Location */}
+      <div>
+        <label className="block font-bold text-slate-300 mb-2 flex items-center gap-1.5">
+          <MapPin className="w-3.5 h-3.5 text-rose-400" />
+          <span>Location</span>
+        </label>
+        <select
+          value={filters.location || WORLDWIDE_LOCATION}
+          onChange={(e) =>
+            onChangeFilters({ location: e.target.value === WORLDWIDE_LOCATION ? undefined : e.target.value })
+          }
+          className="w-full bg-slate-900/80 border border-slate-800 rounded-xl px-3 py-2 font-semibold text-slate-200 focus:border-brand-500 focus:outline-none transition-all"
+        >
+          {LOCATION_OPTIONS.map((loc) => (
+            <option key={loc} value={loc}>
+              {loc === WORLDWIDE_LOCATION ? 'Worldwide / Remote' : loc}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* 3. Remote Work Style */}
       <div>
         <label className="block font-bold text-slate-300 mb-2">Workplace Flexibility</label>
         <div className="grid grid-cols-2 gap-1.5">
@@ -126,7 +147,7 @@ export const JobFilterDrawer: React.FC<JobFilterDrawerProps> = ({
         </div>
       </div>
 
-      {/* 3. Minimum Salary Slider */}
+      {/* 4. Minimum Salary Slider */}
       <div>
         <div className="flex justify-between font-bold text-slate-300 mb-2">
           <span>Minimum Annual Salary</span>
@@ -150,7 +171,7 @@ export const JobFilterDrawer: React.FC<JobFilterDrawerProps> = ({
         </div>
       </div>
 
-      {/* 4. Freshness / Date Posted */}
+      {/* 5. Freshness / Date Posted */}
       <div>
         <label className="block font-bold text-slate-300 mb-2 flex items-center gap-1.5">
           <Calendar className="w-3.5 h-3.5 text-slate-400" />
@@ -174,7 +195,7 @@ export const JobFilterDrawer: React.FC<JobFilterDrawerProps> = ({
         </div>
       </div>
 
-      {/* 5. Job Quality Score Threshold */}
+      {/* 6. Job Quality Score Threshold */}
       <div>
         <div className="flex justify-between font-bold text-slate-300 mb-2">
           <span className="flex items-center gap-1.5">
@@ -196,7 +217,7 @@ export const JobFilterDrawer: React.FC<JobFilterDrawerProps> = ({
         />
       </div>
 
-      {/* 6. Source Provider */}
+      {/* 7. Source Provider */}
       <div>
         <label className="block font-bold text-slate-300 mb-2">Job Source</label>
         <div className="grid grid-cols-2 gap-1.5">

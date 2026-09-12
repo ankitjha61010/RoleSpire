@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { 
   Layers, 
   Plus, 
@@ -14,7 +14,10 @@ import {
 } from 'lucide-react';
 import { Application, ApplicationEventType, ApplicationStatus } from '../types';
 import { useApplications } from '../context/ApplicationContext';
+import { Pagination } from '../components/common/Pagination';
 import confetti from 'canvas-confetti';
+
+const APPLICATIONS_PAGE_SIZE = 10;
 
 const STATUS_COLUMNS: { id: ApplicationStatus; label: string; color: string; badgeBg: string }[] = [
   { id: 'saved', label: 'Saved Leads', color: 'text-slate-300', badgeBg: 'bg-slate-800' },
@@ -40,6 +43,22 @@ export const ApplicationsPage: React.FC = () => {
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [selectedApp, setSelectedApp] = useState<Application | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [appsPage, setAppsPage] = useState(1);
+  const appsTableScrollRef = useRef<HTMLDivElement>(null);
+  const handleAppsPageChange = (p: number) => {
+    setAppsPage(p);
+    appsTableScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+  const totalAppsPages = Math.max(1, Math.ceil(applications.length / APPLICATIONS_PAGE_SIZE));
+  const pagedApplications = applications.slice(
+    (appsPage - 1) * APPLICATIONS_PAGE_SIZE,
+    appsPage * APPLICATIONS_PAGE_SIZE
+  );
+
+  // Clamp back to the last valid page if applications shrink (e.g. after a delete)
+  useEffect(() => {
+    if (appsPage > totalAppsPages) setAppsPage(totalAppsPages);
+  }, [appsPage, totalAppsPages]);
 
   // New Application Form state
   const [newTitle, setNewTitle] = useState('');
@@ -161,7 +180,7 @@ export const ApplicationsPage: React.FC = () => {
                   </div>
 
                   {/* Cards */}
-                  <div className="space-y-2 flex-1 min-h-[180px]">
+                  <div className="space-y-2 flex-1 min-h-[180px] max-h-[calc(100vh-22rem)] overflow-y-auto pr-1 -mr-1">
                     {colApps.map((app) => (
                       <div
                         key={app.id}
@@ -234,9 +253,10 @@ export const ApplicationsPage: React.FC = () => {
 
       {/* List View */}
       {viewMode === 'list' && (
-        <div className="glass-panel rounded-2xl border border-slate-800 overflow-x-auto shadow-md">
+        <div className="glass-panel rounded-2xl border border-slate-800 shadow-md">
+          <div ref={appsTableScrollRef} className="overflow-auto h-[min(70vh,640px)]">
           <table className="w-full text-left text-xs text-slate-300">
-            <thead className="bg-slate-900/90 border-b border-slate-800 text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
+            <thead className="sticky top-0 z-10 bg-slate-900/95 backdrop-blur-sm border-b border-slate-800 text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
               <tr>
                 <th className="p-3">Company & Role</th>
                 <th className="p-3">Status</th>
@@ -247,7 +267,7 @@ export const ApplicationsPage: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/80">
-              {applications.map((app) => (
+              {pagedApplications.map((app) => (
                 <tr
                   key={app.id}
                   onClick={() => setSelectedApp(app)}
@@ -286,6 +306,10 @@ export const ApplicationsPage: React.FC = () => {
               ))}
             </tbody>
           </table>
+          </div>
+          <div className="p-3 border-t border-slate-800">
+            <Pagination currentPage={appsPage} totalPages={totalAppsPages} onPageChange={handleAppsPageChange} />
+          </div>
         </div>
       )}
 
@@ -464,7 +488,7 @@ export const ApplicationsPage: React.FC = () => {
                   required
                   value={newCompany}
                   onChange={(e) => setNewCompany(e.target.value)}
-                  placeholder="e.g. Stripe, Razorpay"
+                  placeholder="e.g. Google, Stripe"
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-brand-500"
                 />
               </div>

@@ -1,5 +1,6 @@
 import { Job, JobSource } from '../../types';
 import { JobProvider, JobProviderFetchParams, JobProviderFetchResult } from './types';
+import { cleanHtmlDescription } from './htmlUtils';
 
 /**
  * Adzuna Job Search API Adapter
@@ -27,7 +28,7 @@ export class AdzunaProvider implements JobProvider {
         hasMore: false,
         provider: this.name,
         isRealApi: false,
-        errorMessage: 'Adzuna API credentials (VITE_ADZUNA_APP_ID, VITE_ADZUNA_APP_KEY) not configured. Showing verified platform listings.',
+        errorMessage: 'Adzuna API credentials (VITE_ADZUNA_APP_ID, VITE_ADZUNA_APP_KEY) not configured. Skipping this provider.',
       };
     }
 
@@ -52,9 +53,9 @@ export class AdzunaProvider implements JobProvider {
       const results: any[] = data.results || [];
 
       const normalizedJobs: Job[] = results.map((item) => {
-        const title = item.title ? item.title.replace(/<[^>]*>/g, '') : 'Software Role';
+        const title = item.title ? cleanHtmlDescription(item.title) : 'Software Role';
         const company = item.company?.display_name || 'Hiring Company';
-        const description = item.description ? item.description.replace(/<[^>]*>/g, '') : '';
+        const description = cleanHtmlDescription(item.description || '');
         const isRemote = (item.title + ' ' + item.description + ' ' + item.location?.display_name).toLowerCase().includes('remote');
 
         // Extract skills from description
@@ -63,10 +64,11 @@ export class AdzunaProvider implements JobProvider {
           new RegExp(`\\b${sk}\\b`, 'i').test(title + ' ' + description)
         );
 
+        const sourceId = item.id != null ? String(item.id) : item.redirect_url || `${title}-${company}`;
         return {
-          id: `adzuna_${item.id}`,
+          id: `adzuna_${sourceId}`,
           source: 'adzuna' as JobSource,
-          sourceJobId: String(item.id),
+          sourceJobId: sourceId,
           title,
           company,
           location: item.location?.display_name || (isRemote ? 'Remote' : 'India'),

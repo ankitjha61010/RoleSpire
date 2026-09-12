@@ -25,8 +25,8 @@ export function calculateMatchScore(job: Job, profile: UserProfile | null): JobM
     };
   }
 
-  const userSkillNames = profile.skills.map((s) => s.name.toLowerCase().trim());
-  const jobSkills = (job.skills || []).map((s) => s.toLowerCase().trim());
+  const userSkillNames = (profile.skills || []).map((s) => (s.name || '').toLowerCase().trim());
+  const jobSkills = (job.skills || []).map((s) => (s || '').toLowerCase().trim());
 
   // 1. Skills Match (0 - 100)
   let skillsScore = 50;
@@ -38,7 +38,7 @@ export function calculateMatchScore(job: Job, profile: UserProfile | null): JobM
     skillsScore = Math.min(100, Math.round((matchedSkillsCount / jobSkills.length) * 100));
   } else {
     // If job has no explicit skills listed, check title match with user headline/skills
-    const titleLower = job.title.toLowerCase();
+    const titleLower = (job.title || '').toLowerCase();
     const titleSkillMatch = userSkillNames.some((us) => titleLower.includes(us));
     skillsScore = titleSkillMatch ? 85 : 65;
   }
@@ -46,7 +46,7 @@ export function calculateMatchScore(job: Job, profile: UserProfile | null): JobM
   // 2. Experience Match (0 - 100)
   let expScore = 80;
   const userExp = profile.experienceYears;
-  const jobExpLevel = job.experienceLevel.toLowerCase();
+  const jobExpLevel = (job.experienceLevel || '').toLowerCase();
   if (jobExpLevel.includes('entry') || jobExpLevel.includes('junior')) {
     expScore = userExp >= 0 && userExp <= 3 ? 100 : 75;
   } else if (jobExpLevel.includes('mid')) {
@@ -59,8 +59,8 @@ export function calculateMatchScore(job: Job, profile: UserProfile | null): JobM
 
   // 3. Location Match (0 - 100)
   let locationScore = 60;
-  const jobLocationLower = job.location.toLowerCase();
-  const userLocLower = profile.currentLocation.toLowerCase();
+  const jobLocationLower = (job.location || '').toLowerCase();
+  const userLocLower = (profile.currentLocation || '').toLowerCase();
   const preferredLocs = (profile.preferredLocations || []).map((l) => l.toLowerCase());
 
   if (job.remoteType === 'remote') {

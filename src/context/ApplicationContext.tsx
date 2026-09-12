@@ -3,111 +3,6 @@ import { Application, ApplicationEvent, ApplicationEventType, ApplicationStatus,
 import { LOCAL_STORAGE_KEYS, supabase, isSupabaseConfigured } from '../lib/supabaseClient';
 import { useAuth } from './AuthContext';
 
-// Initial sample applications
-const INITIAL_APPLICATIONS: Application[] = [
-  {
-    id: 'app_rzp_01',
-    userId: 'usr_abhishek_demo',
-    jobId: 'job_razorpay_01',
-    companyName: 'Razorpay',
-    jobTitle: 'Senior React Native Developer',
-    status: 'interview',
-    location: 'Ahmedabad (Hybrid)',
-    salaryOffered: '₹26,00,000 / year',
-    contactPerson: 'Priya Sharma (Tech Recruiter)',
-    contactEmail: 'priya.s@razorpay.com',
-    appliedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-    interviewDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
-    followUpDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
-    matchScore: 94,
-    notes: 'Completed Round 1 with Lead Architect. Focus on Native bridging and animation performance in next technical round.',
-    createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'app_linear_02',
-    userId: 'usr_abhishek_demo',
-    jobId: 'job_linear_02',
-    companyName: 'Linear',
-    jobTitle: 'Full Stack Engineer (React + Node.js)',
-    status: 'assessment',
-    location: 'Remote',
-    salaryOffered: '₹42,00,000 / year ($50k USD)',
-    contactPerson: 'Tuomas Artman (Co-founder)',
-    contactEmail: 'careers@linear.app',
-    appliedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
-    followUpDate: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString(),
-    matchScore: 91,
-    notes: 'Take-home assignment received: build an offline-first task sync widget with optimistic UI updates.',
-    createdAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'app_swiggy_03',
-    userId: 'usr_abhishek_demo',
-    jobId: 'job_swiggy_03',
-    companyName: 'Swiggy',
-    jobTitle: 'Frontend Platform Engineer',
-    status: 'applied',
-    location: 'Bangalore, India',
-    appliedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-    followUpDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
-    matchScore: 88,
-    notes: 'Submitted application via employee referral link from engineering meetup.',
-    createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'app_stripe_04',
-    userId: 'usr_abhishek_demo',
-    jobId: 'job_stripe_05',
-    companyName: 'Stripe',
-    jobTitle: 'Staff Backend Engineer',
-    status: 'offer',
-    location: 'Remote',
-    salaryOffered: '₹62,00,000 / year + Equity',
-    contactPerson: 'Sarah Jenkins',
-    appliedAt: new Date(Date.now() - 25 * 24 * 60 * 60 * 1000).toISOString(),
-    matchScore: 86,
-    notes: 'Official Offer letter received! Reviewing compensation structure and stock vesting schedule.',
-    createdAt: new Date(Date.now() - 25 * 24 * 60 * 60 * 1000).toISOString(),
-    updatedAt: new Date().toISOString(),
-  }
-];
-
-const INITIAL_EVENTS: ApplicationEvent[] = [
-  {
-    id: 'ev_1',
-    applicationId: 'app_rzp_01',
-    userId: 'usr_abhishek_demo',
-    eventType: 'applied',
-    title: 'Application Submitted',
-    description: 'Applied directly with customized resume and portfolio link.',
-    eventDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-    createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 'ev_2',
-    applicationId: 'app_rzp_01',
-    userId: 'usr_abhishek_demo',
-    eventType: 'screening',
-    title: 'Recruiter Screening Call',
-    description: 'Discussed past mobile projects, compensation expectations, and role scope.',
-    eventDate: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-    createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 'ev_3',
-    applicationId: 'app_rzp_01',
-    userId: 'usr_abhishek_demo',
-    eventType: 'technical_interview',
-    title: 'Technical Round 1 Completed',
-    description: 'Deep-dive into React Native architecture, state management, and memory leaks.',
-    eventDate: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-    createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-];
-
 interface ApplicationContextType {
   applications: Application[];
   events: ApplicationEvent[];
@@ -126,20 +21,21 @@ interface ApplicationContextType {
 export const ApplicationContext = createContext<ApplicationContextType | undefined>(undefined);
 
 export const ApplicationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { profile } = useAuth();
   const [applications, setApplications] = useState<Application[]>(() => {
     const saved = localStorage.getItem(LOCAL_STORAGE_KEYS.APPLICATIONS);
     if (saved) {
-      try { return JSON.parse(saved); } catch { return INITIAL_APPLICATIONS; }
+      try { return JSON.parse(saved); } catch { return []; }
     }
-    return INITIAL_APPLICATIONS;
+    return [];
   });
 
   const [events, setEvents] = useState<ApplicationEvent[]>(() => {
     const saved = localStorage.getItem(LOCAL_STORAGE_KEYS.APPLICATION_EVENTS);
     if (saved) {
-      try { return JSON.parse(saved); } catch { return INITIAL_EVENTS; }
+      try { return JSON.parse(saved); } catch { return []; }
     }
-    return INITIAL_EVENTS;
+    return [];
   });
 
   // Save to localStorage
@@ -182,7 +78,7 @@ export const ApplicationProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const createApplication = async (data: Partial<Application>, job?: Job): Promise<Application> => {
     const newApp: Application = {
       id: `app_${Date.now()}`,
-      userId: 'usr_abhishek_demo',
+      userId: profile?.id || 'guest',
       jobId: job?.id || data.jobId,
       companyName: data.companyName || job?.company || 'Hiring Organization',
       jobTitle: data.jobTitle || job?.title || 'Open Position',
@@ -259,7 +155,7 @@ export const ApplicationProvider: React.FC<{ children: React.ReactNode }> = ({ c
     const newEvent: ApplicationEvent = {
       id: `ev_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       applicationId,
-      userId: 'usr_abhishek_demo',
+      userId: profile?.id || 'guest',
       eventType,
       title,
       description,

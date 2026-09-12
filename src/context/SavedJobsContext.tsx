@@ -1,17 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { CustomFolder, Job, SavedFolderType, SavedJobRecord } from '../types';
 import { LOCAL_STORAGE_KEYS } from '../lib/supabaseClient';
-
-const INITIAL_FOLDERS: CustomFolder[] = [
-  { id: 'fld_dream', userId: 'usr_abhishek_demo', name: 'Dream Companies', color: '#ec4899', icon: 'sparkles', createdAt: new Date().toISOString() },
-  { id: 'fld_high_pri', userId: 'usr_abhishek_demo', name: 'High Priority (This Week)', color: '#f59e0b', icon: 'flame', createdAt: new Date().toISOString() },
-  { id: 'fld_remote', userId: 'usr_abhishek_demo', name: '100% Remote Leads', color: '#06b6d4', icon: 'globe', createdAt: new Date().toISOString() },
-];
-
-const INITIAL_SAVED_RECORDS: SavedJobRecord[] = [
-  { id: 'sav_1', userId: 'usr_abhishek_demo', jobId: 'job_linear_02', folderType: 'dream_jobs', notes: 'Loved their offline sync architecture presentation.', savedAt: new Date().toISOString() },
-  { id: 'sav_2', userId: 'usr_abhishek_demo', jobId: 'job_airbnb_10', folderType: 'high_priority', notes: 'Prepare design system portfolio before submitting.', savedAt: new Date().toISOString() },
-];
+import { useAuth } from './AuthContext';
 
 interface SavedJobsContextType {
   savedRecords: SavedJobRecord[];
@@ -28,20 +18,21 @@ interface SavedJobsContextType {
 const SavedJobsContext = createContext<SavedJobsContextType | undefined>(undefined);
 
 export const SavedJobsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { profile } = useAuth();
   const [savedRecords, setSavedRecords] = useState<SavedJobRecord[]>(() => {
     const saved = localStorage.getItem(LOCAL_STORAGE_KEYS.SAVED_JOBS);
     if (saved) {
-      try { return JSON.parse(saved); } catch { return INITIAL_SAVED_RECORDS; }
+      try { return JSON.parse(saved); } catch { return []; }
     }
-    return INITIAL_SAVED_RECORDS;
+    return [];
   });
 
   const [customFolders, setCustomFolders] = useState<CustomFolder[]>(() => {
     const saved = localStorage.getItem(LOCAL_STORAGE_KEYS.CUSTOM_FOLDERS);
     if (saved) {
-      try { return JSON.parse(saved); } catch { return INITIAL_FOLDERS; }
+      try { return JSON.parse(saved); } catch { return []; }
     }
-    return INITIAL_FOLDERS;
+    return [];
   });
 
   useEffect(() => {
@@ -62,7 +53,7 @@ export const SavedJobsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
       const newRecord: SavedJobRecord = {
         id: `sav_${Date.now()}`,
-        userId: 'usr_abhishek_demo',
+        userId: profile?.id || 'guest',
         jobId,
         folderType,
         folderId,
@@ -84,7 +75,7 @@ export const SavedJobsProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const createCustomFolder = (name: string, color = '#6366f1', icon = 'folder') => {
     const newFolder: CustomFolder = {
       id: `fld_${Date.now()}`,
-      userId: 'usr_abhishek_demo',
+      userId: profile?.id || 'guest',
       name,
       color,
       icon,

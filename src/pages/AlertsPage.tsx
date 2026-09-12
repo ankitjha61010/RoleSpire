@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { 
   Bell, 
   Plus, 
@@ -12,11 +12,20 @@ import {
   Sparkles
 } from 'lucide-react';
 import { useJobAlerts } from '../context/AlertsContext';
+import { ScrollablePaginatedList } from '../components/common/ScrollablePaginatedList';
 import confetti from 'canvas-confetti';
+
+const ALERTS_PAGE_SIZE = 10;
 
 export const AlertsPage: React.FC = () => {
   const { alerts, createAlert, toggleAlert, deleteAlert } = useJobAlerts();
   const [showModal, setShowModal] = useState(false);
+  const [alertsPage, setAlertsPage] = useState(1);
+  const totalAlertsPages = Math.max(1, Math.ceil(alerts.length / ALERTS_PAGE_SIZE));
+  const pagedAlerts = useMemo(
+    () => alerts.slice((alertsPage - 1) * ALERTS_PAGE_SIZE, alertsPage * ALERTS_PAGE_SIZE),
+    [alerts, alertsPage]
+  );
 
   // New alert form
   const [title, setTitle] = useState('');
@@ -71,8 +80,24 @@ export const AlertsPage: React.FC = () => {
       </div>
 
       {/* Alerts Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {alerts.map((alert) => (
+      {alerts.length === 0 ? (
+        <div className="glass-panel rounded-3xl p-12 text-center border border-slate-800 space-y-4">
+          <div className="w-16 h-16 rounded-3xl bg-slate-800 flex items-center justify-center text-slate-400 mx-auto">
+            <Bell className="w-8 h-8 text-amber-400" />
+          </div>
+          <h3 className="text-lg font-bold text-white">No Alerts Yet</h3>
+          <p className="text-xs text-slate-400 max-w-md mx-auto">
+            Create an alert to get notified when a high-match opportunity goes live.
+          </p>
+        </div>
+      ) : (
+      <ScrollablePaginatedList
+        currentPage={alertsPage}
+        totalPages={totalAlertsPages}
+        onPageChange={setAlertsPage}
+        listClassName="grid grid-cols-1 md:grid-cols-2 gap-4"
+      >
+        {pagedAlerts.map((alert) => (
           <div
             key={alert.id}
             className={`glass-panel rounded-3xl p-5 border transition-all ${
@@ -145,7 +170,8 @@ export const AlertsPage: React.FC = () => {
             </div>
           </div>
         ))}
-      </div>
+      </ScrollablePaginatedList>
+      )}
 
       {/* Create Alert Modal */}
       {showModal && (

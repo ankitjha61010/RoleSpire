@@ -223,3 +223,24 @@ CREATE INDEX IF NOT EXISTS idx_jobs_remote_type ON public.jobs(remote_type);
 CREATE INDEX IF NOT EXISTS idx_jobs_posted_at ON public.jobs(posted_at DESC);
 CREATE INDEX IF NOT EXISTS idx_applications_user_id ON public.applications(user_id);
 CREATE INDEX IF NOT EXISTS idx_saved_jobs_user_id ON public.saved_jobs(user_id);
+
+-- ==============================================================================
+-- 13. PUBLIC PEOPLE SEARCH
+-- The base `profiles` table stays locked to "view own row only" (see policy
+-- above) — email, salary expectations, resume, bio, and location never leave
+-- a user's own session. This adds a narrow, additive view so signed-in users
+-- can find each other by name, exposing ONLY name/headline/company/avatar.
+-- ==============================================================================
+
+-- The `company` field is part of the app's profile form but had no column yet.
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS company TEXT;
+
+-- Views run with their owner's privileges by default (not the querying
+-- user's), so this deliberately does NOT set security_invoker — that's what
+-- lets it read across all rows despite the strict per-user RLS policy on the
+-- underlying table, while only ever exposing these four columns.
+CREATE OR REPLACE VIEW public.public_profiles AS
+SELECT id, full_name, headline, company, avatar_url
+FROM public.profiles;
+
+GRANT SELECT ON public.public_profiles TO authenticated;

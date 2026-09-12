@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { 
   Users, 
   Plus, 
@@ -25,7 +25,10 @@ import { useChat } from '../context/ChatContext';
 import { useAuth } from '../context/AuthContext';
 import { NavPage } from '../components/layout/Navbar';
 import { UserRoleBadge } from '../components/common/UserRoleBadge';
+import { ScrollablePaginatedList } from '../components/common/ScrollablePaginatedList';
 import confetti from 'canvas-confetti';
+
+const POSTS_PAGE_SIZE = 10;
 
 interface CommunityPageProps {
   setActivePage: (page: NavPage) => void;
@@ -51,8 +54,20 @@ export const CommunityPage: React.FC<CommunityPageProps> = ({ setActivePage, onS
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({});
   const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({ post_1: true });
 
+  const [postsPage, setPostsPage] = useState(1);
+
   const filteredPosts = posts.filter((p) =>
     activeCategory === 'all' ? true : p.category === activeCategory
+  );
+
+  useEffect(() => {
+    setPostsPage(1);
+  }, [activeCategory]);
+
+  const totalPostsPages = Math.max(1, Math.ceil(filteredPosts.length / POSTS_PAGE_SIZE));
+  const pagedPosts = useMemo(
+    () => filteredPosts.slice((postsPage - 1) * POSTS_PAGE_SIZE, postsPage * POSTS_PAGE_SIZE),
+    [filteredPosts, postsPage]
   );
 
   const handleCreateSubmit = (e: React.FormEvent) => {
@@ -91,7 +106,7 @@ export const CommunityPage: React.FC<CommunityPageProps> = ({ setActivePage, onS
         avatarUrl: post.author.avatarUrl,
         headline: post.author.headline,
         company: post.author.company || 'Tech Member',
-        isOnline: true,
+        isOnline: false,
         role: post.author.role,
         badgeStatus: post.author.badgeStatus,
       },
@@ -150,8 +165,13 @@ export const CommunityPage: React.FC<CommunityPageProps> = ({ setActivePage, onS
       </div>
 
       {/* Feed Posts */}
-      <div className="space-y-4">
-        {filteredPosts.map((post) => (
+      {filteredPosts.length === 0 ? (
+        <div className="glass-panel rounded-2xl p-8 text-center text-slate-400 border border-slate-800 text-xs">
+          No posts in this category yet — be the first to share something.
+        </div>
+      ) : (
+      <ScrollablePaginatedList currentPage={postsPage} totalPages={totalPostsPages} onPageChange={setPostsPage}>
+        {pagedPosts.map((post) => (
           <div
             key={post.id}
             className="glass-panel rounded-2xl p-4 sm:p-5 border border-slate-800 space-y-3.5 hover:border-brand-500/30 transition-all text-xs shadow-md"
@@ -374,7 +394,8 @@ export const CommunityPage: React.FC<CommunityPageProps> = ({ setActivePage, onS
             )}
           </div>
         ))}
-      </div>
+      </ScrollablePaginatedList>
+      )}
 
       {/* Create Post Modal */}
       {showCreateModal && (
@@ -423,7 +444,7 @@ export const CommunityPage: React.FC<CommunityPageProps> = ({ setActivePage, onS
                   required
                   value={postTitle}
                   onChange={(e) => setPostTitle(e.target.value)}
-                  placeholder="e.g. Hiring Senior React Native Leads at Razorpay"
+                  placeholder="e.g. Hiring Senior React Native Leads"
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-brand-500 font-semibold"
                 />
               </div>
@@ -434,7 +455,7 @@ export const CommunityPage: React.FC<CommunityPageProps> = ({ setActivePage, onS
                   type="text"
                   value={postCompany}
                   onChange={(e) => setPostCompany(e.target.value)}
-                  placeholder="e.g. Razorpay, Linear, Swiggy"
+                  placeholder="e.g. Google, Stripe"
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-brand-500"
                 />
               </div>

@@ -14,9 +14,11 @@ import { useApplications } from '../context/ApplicationContext';
 import { Job, JobFilters } from '../types';
 import { JobCard } from '../components/jobs/JobCard';
 import { NavPage } from '../components/layout/Navbar';
+import { LOCATION_OPTIONS, WORLDWIDE_LOCATION } from '../constants/indiaLocations';
 
 interface HomePageProps {
   jobs: Job[];
+  isLoading: boolean;
   onSelectJob: (job: Job) => void;
   setActivePage: (page: NavPage) => void;
   onSearchWithFilters: (filters: Partial<JobFilters>) => void;
@@ -24,6 +26,7 @@ interface HomePageProps {
 
 export const HomePage: React.FC<HomePageProps> = ({
   jobs,
+  isLoading,
   onSelectJob,
   setActivePage,
   onSearchWithFilters,
@@ -33,14 +36,14 @@ export const HomePage: React.FC<HomePageProps> = ({
 
   // Interactive search state in hero
   const [heroTitle, setHeroTitle] = useState('React Native Developer');
-  const [heroLocation, setHeroLocation] = useState('Ahmedabad');
+  const [heroLocation, setHeroLocation] = useState(WORLDWIDE_LOCATION);
   const [heroRemote, setHeroRemote] = useState<'remote' | 'hybrid' | 'all'>('remote');
   const [heroSalary, setHeroSalary] = useState(1200000);
 
   const handleHeroSearch = () => {
     onSearchWithFilters({
       query: heroTitle,
-      location: heroLocation === 'Anywhere' ? undefined : heroLocation,
+      location: heroLocation === WORLDWIDE_LOCATION ? undefined : heroLocation,
       remoteType: heroRemote === 'all' ? 'all' : heroRemote,
       minSalary: heroSalary > 0 ? heroSalary : undefined,
     });
@@ -50,6 +53,21 @@ export const HomePage: React.FC<HomePageProps> = ({
   const strongMatchesCount = jobs.filter((j) => (j.matchScore?.totalScore || 0) >= 80).length;
   const bestMatchJob = [...jobs].sort((a, b) => (b.matchScore?.totalScore || 0) - (a.matchScore?.totalScore || 0))[0];
   const freshJobs = jobs.filter((j) => j.qualityScore?.freshnessStatus === 'hot' || j.qualityScore?.freshnessStatus === 'active').slice(0, 3);
+
+  // Real skill-gap insight derived from the currently loaded jobs — no fabricated stats
+  const avgProfileFit = jobs.length > 0
+    ? Math.round(jobs.reduce((sum, j) => sum + (j.skillGap?.matchPercentage || 0), 0) / jobs.length)
+    : null;
+
+  const missingSkillCounts = new Map<string, number>();
+  jobs.forEach((j) => (j.skillGap?.missingSkills || []).forEach((s) => missingSkillCounts.set(s, (missingSkillCounts.get(s) || 0) + 1)));
+  const topMissingSkill = Array.from(missingSkillCounts.entries()).sort((a, b) => b[1] - a[1])[0];
+
+  const topProfileSkills = (profile?.skills || [])
+    .slice()
+    .sort((a, b) => b.yearsOfExperience - a.yearsOfExperience)
+    .slice(0, 3)
+    .map((s) => s.name);
 
   return (
     <div className="space-y-6 sm:space-y-8 pb-16">
@@ -105,10 +123,11 @@ export const HomePage: React.FC<HomePageProps> = ({
                   onChange={(e) => setHeroLocation(e.target.value)}
                   className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-white focus:border-brand-500 focus:outline-none transition-all"
                 >
-                  <option value="Ahmedabad">Ahmedabad, India</option>
-                  <option value="Bangalore">Bangalore, India</option>
-                  <option value="Pune">Pune, India</option>
-                  <option value="Anywhere">Worldwide / Remote</option>
+                  {LOCATION_OPTIONS.map((loc) => (
+                    <option key={loc} value={loc}>
+                      {loc === WORLDWIDE_LOCATION ? 'Worldwide / Remote' : loc}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -155,12 +174,12 @@ export const HomePage: React.FC<HomePageProps> = ({
                   type="button"
                   onClick={() => {
                     setHeroTitle('React Native Developer');
-                    setHeroLocation('Ahmedabad');
+                    setHeroLocation('Gujarat');
                     setHeroRemote('hybrid');
                   }}
                   className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 text-[11px] font-medium transition-all"
                 >
-                  React Native Ahmedabad
+                  React Native Gujarat
                 </button>
                 <button
                   type="button"
@@ -207,10 +226,10 @@ export const HomePage: React.FC<HomePageProps> = ({
               </div>
             </div>
             <div className="text-2xl sm:text-3xl font-extrabold text-emerald-400">
-              {bestMatchJob?.matchScore?.totalScore || 92}%
+              {bestMatchJob?.matchScore?.totalScore != null ? `${bestMatchJob.matchScore.totalScore}%` : '—'}
             </div>
             <div className="text-[11px] text-slate-400 mt-1 truncate">
-              {bestMatchJob?.company || 'Razorpay / Tech'}
+              {bestMatchJob?.company || 'No matches yet'}
             </div>
           </div>
 
@@ -222,7 +241,7 @@ export const HomePage: React.FC<HomePageProps> = ({
               </div>
             </div>
             <div className="text-2xl sm:text-3xl font-extrabold text-white">
-              {jobs.length}
+              {isLoading ? '…' : jobs.length}
             </div>
             <div className="text-[11px] text-cyan-300 mt-1">
               🔥 {freshJobs.length} fresh in 48h
@@ -272,12 +291,21 @@ export const HomePage: React.FC<HomePageProps> = ({
               <h3 className="text-xs sm:text-sm font-bold text-white">
                 Personalized Skill Match Advantage
               </h3>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-brand-500/20 text-brand-300 border border-brand-500/40 font-semibold whitespace-nowrap">
-                92% Profile Fit
-              </span>
+              {avgProfileFit !== null && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-brand-500/20 text-brand-300 border border-brand-500/40 font-semibold whitespace-nowrap">
+                  {avgProfileFit}% Profile Fit
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-300 leading-relaxed">
-              Your profile is in high demand for <strong>React Native, TypeScript, & Node.js</strong>. Upskilling in <span className="text-brand-300 font-bold">AWS & Docker</span> will unlock 8 additional high-paying listings.
+              {topProfileSkills.length > 0 ? (
+                <>Your profile is in demand for <strong>{topProfileSkills.join(', ')}</strong>. </>
+              ) : null}
+              {topMissingSkill ? (
+                <>Upskilling in <span className="text-brand-300 font-bold">{topMissingSkill[0]}</span> would unlock {topMissingSkill[1]} additional high-fit listing{topMissingSkill[1] === 1 ? '' : 's'}.</>
+              ) : (
+                'Add your skills in Profile to get a personalized skill-gap breakdown against live listings.'
+              )}
             </p>
           </div>
         </div>
@@ -315,15 +343,31 @@ export const HomePage: React.FC<HomePageProps> = ({
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {jobs.slice(0, 4).map((job) => (
-            <JobCard
-              key={job.id}
-              job={job}
-              onSelectJob={onSelectJob}
-            />
-          ))}
-        </div>
+        {isLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {[1, 2].map((n) => (
+              <div key={n} className="glass-panel p-6 rounded-3xl animate-pulse space-y-3">
+                <div className="h-4 bg-slate-800 rounded w-1/3" />
+                <div className="h-3 bg-slate-850 rounded w-1/2" />
+                <div className="h-12 bg-slate-900 rounded" />
+              </div>
+            ))}
+          </div>
+        ) : jobs.length === 0 ? (
+          <div className="glass-panel rounded-2xl p-8 text-center text-slate-400 border border-slate-800 text-xs">
+            No live listings loaded yet — try searching or check back shortly.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {jobs.slice(0, 4).map((job) => (
+              <JobCard
+                key={job.id}
+                job={job}
+                onSelectJob={onSelectJob}
+              />
+            ))}
+          </div>
+        )}
       </section>
     </div>
   );

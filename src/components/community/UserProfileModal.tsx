@@ -1,21 +1,15 @@
 import React, { useState } from 'react';
-import { 
-  X, 
-  User, 
-  Briefcase, 
-  MapPin, 
-  MessageSquare, 
-  UserPlus, 
-  Check, 
-  ExternalLink, 
-  Sparkles, 
-  Building2, 
-  ShieldCheck, 
-  Award,
-  Globe
+import {
+  X,
+  Briefcase,
+  MapPin,
+  MessageSquare,
+  UserPlus,
+  Check,
+  Building2,
+  ShieldCheck,
 } from 'lucide-react';
 import { PostAuthor } from '../../types';
-import { useChat } from '../../context/ChatContext';
 
 interface UserProfileModalProps {
   user: PostAuthor | null;
@@ -33,30 +27,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   const [isConnected, setIsConnected] = useState(false);
 
   if (!isOpen || !user) return null;
-
-  // Mock profile details tailored to user identity
-  const userBio = user.isRecruiter
-    ? `Leading technical talent acquisition for ${user.company || 'top startups'}. Specializing in Frontend, Mobile (React Native), Full Stack, and Distributed Systems hiring.`
-    : `Software Engineer specializing in modern web, mobile architecture, TypeScript, React, and high-scale applications at ${user.company || 'Tech Leader'}.`;
-
-  const skills = user.isRecruiter
-    ? ['Technical Recruiting', 'Executive Search', 'Engineering Hiring', 'Compensation Benchmarking', 'Sourcing']
-    : ['React', 'React Native', 'TypeScript', 'Node.js', 'System Architecture', 'GraphQL', 'Tailwind CSS'];
-
-  const experienceHistory = [
-    {
-      role: user.headline || 'Staff Engineer',
-      company: user.company || 'Tech Leader',
-      period: '2023 - Present (2+ yrs)',
-      location: 'Ahmedabad / Bangalore / Remote',
-    },
-    {
-      role: user.isRecruiter ? 'Senior Talent Partner' : 'Full Stack Developer',
-      company: 'High-Growth Tech Startup',
-      period: '2021 - 2023 (2 yrs)',
-      location: 'Remote',
-    }
-  ];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
@@ -143,45 +113,13 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           </button>
         </div>
 
-        {/* Bio */}
+        {/* About */}
         <div className="p-3.5 rounded-2xl bg-slate-950/70 border border-slate-800 mb-4 text-xs">
           <div className="font-bold text-white mb-1">About</div>
-          <p className="text-slate-300 leading-relaxed text-[11px]">{userBio}</p>
-        </div>
-
-        {/* Verified Skills */}
-        <div className="mb-4">
-          <div className="text-xs font-bold text-white mb-2 flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 text-brand-400" />
-            <span>Key Skills & Expertise</span>
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {skills.map((s) => (
-              <span
-                key={s}
-                className="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-800 text-brand-300 text-[11px] font-medium"
-              >
-                {s}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        {/* Experience Timeline */}
-        <div>
-          <div className="text-xs font-bold text-white mb-2 flex items-center gap-1.5">
-            <Briefcase className="w-3.5 h-3.5 text-brand-400" />
-            <span>Experience</span>
-          </div>
-          <div className="space-y-2">
-            {experienceHistory.map((exp, idx) => (
-              <div key={idx} className="p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80 text-xs">
-                <div className="font-bold text-white">{exp.role}</div>
-                <div className="text-[11px] text-brand-300">{exp.company}</div>
-                <div className="text-[10px] text-slate-500 font-mono mt-0.5">{exp.period} • {exp.location}</div>
-              </div>
-            ))}
-          </div>
+          <p className="text-slate-300 leading-relaxed text-[11px] flex items-center gap-1.5">
+            <Briefcase className="w-3.5 h-3.5 text-brand-400 shrink-0" />
+            <span>{user.headline}{user.company ? ` at ${user.company}` : ''}</span>
+          </p>
         </div>
       </div>
     </div>

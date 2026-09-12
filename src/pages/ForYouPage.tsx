@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
-import { 
-  Sparkles, 
-  Flame, 
-  IndianRupee, 
-  Globe, 
-  ShieldCheck, 
-  Settings2, 
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  Sparkles,
+  Flame,
+  IndianRupee,
+  Globe,
+  ShieldCheck,
+  Settings2,
   ArrowRight,
   TrendingUp,
   Check
@@ -14,17 +14,22 @@ import { Job } from '../types';
 import { JobCard } from '../components/jobs/JobCard';
 import { useAuth } from '../context/AuthContext';
 import { NavPage } from '../components/layout/Navbar';
+import { ScrollablePaginatedList } from '../components/common/ScrollablePaginatedList';
+
+const PAGE_SIZE = 10;
 
 interface ForYouPageProps {
   jobs: Job[];
+  isLoading: boolean;
   onSelectJob: (job: Job) => void;
   setActivePage: (page: NavPage) => void;
 }
 
-export const ForYouPage: React.FC<ForYouPageProps> = ({ jobs, onSelectJob, setActivePage }) => {
+export const ForYouPage: React.FC<ForYouPageProps> = ({ jobs, isLoading, onSelectJob, setActivePage }) => {
   const { profile, updateProfile } = useAuth();
   const [activeTab, setActiveTab] = useState<'all' | 'best' | 'fresh' | 'salary' | 'remote'>('all');
   const [showPrefModal, setShowPrefModal] = useState(false);
+  const [page, setPage] = useState(1);
 
   // Groupings
   const bestMatches = jobs.filter((j) => (j.matchScore?.totalScore || 0) >= 85);
@@ -41,6 +46,16 @@ export const ForYouPage: React.FC<ForYouPageProps> = ({ jobs, onSelectJob, setAc
       default: return jobs;
     }
   })();
+
+  useEffect(() => {
+    setPage(1);
+  }, [activeTab, jobs]);
+
+  const totalPages = Math.max(1, Math.ceil(displayedJobs.length / PAGE_SIZE));
+  const pagedJobs = useMemo(
+    () => displayedJobs.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [displayedJobs, page]
+  );
 
   return (
     <div className="space-y-8 pb-20">
@@ -132,15 +147,37 @@ export const ForYouPage: React.FC<ForYouPageProps> = ({ jobs, onSelectJob, setAc
       </div>
 
       {/* Jobs Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {displayedJobs.map((job) => (
-          <JobCard
-            key={job.id}
-            job={job}
-            onSelectJob={onSelectJob}
-          />
-        ))}
-      </div>
+      {isLoading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          {[1, 2, 3, 4].map((n) => (
+            <div key={n} className="glass-panel p-6 rounded-3xl animate-pulse space-y-3">
+              <div className="h-4 bg-slate-800 rounded w-1/3" />
+              <div className="h-3 bg-slate-850 rounded w-1/2" />
+              <div className="h-12 bg-slate-900 rounded" />
+            </div>
+          ))}
+        </div>
+      ) : displayedJobs.length === 0 ? (
+        <div className="glass-panel rounded-3xl p-12 text-center border border-slate-800 space-y-2">
+          <p className="text-sm font-bold text-white">No jobs in this view yet</p>
+          <p className="text-xs text-slate-400">Try another tab, or search for more roles to widen your feed.</p>
+        </div>
+      ) : (
+        <ScrollablePaginatedList
+          currentPage={page}
+          totalPages={totalPages}
+          onPageChange={setPage}
+          listClassName="grid grid-cols-1 md:grid-cols-2 gap-5"
+        >
+          {pagedJobs.map((job) => (
+            <JobCard
+              key={job.id}
+              job={job}
+              onSelectJob={onSelectJob}
+            />
+          ))}
+        </ScrollablePaginatedList>
+      )}
     </div>
   );
 };

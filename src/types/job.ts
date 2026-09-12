@@ -1,6 +1,6 @@
 export type RemoteType = 'remote' | 'hybrid' | 'onsite';
 export type EmploymentType = 'full-time' | 'part-time' | 'contract' | 'internship';
-export type JobSource = 'adzuna' | 'greenhouse' | 'lever' | 'direct' | 'demo';
+export type JobSource = 'adzuna' | 'remotive' | 'arbeitnow' | 'greenhouse' | 'lever' | 'direct' | 'demo';
 export type ApplicationType = 'direct' | 'external';
 export type FreshnessStatus = 'hot' | 'active' | 'older' | 'stale';
 

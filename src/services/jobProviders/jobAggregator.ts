@@ -4,9 +4,8 @@ import { calculateQualityScore } from '../scoring/qualityScoreEngine';
 import { analyzeSkillGap } from '../scoring/skillGapEngine';
 import { clusterAndDeduplicateJobs } from '../dedup/duplicateDetector';
 import { AdzunaProvider } from './adzunaProvider';
-import { GreenhouseProvider } from './greenhouseProvider';
-import { LeverProvider } from './leverProvider';
-import { SEED_JOBS } from './sampleJobsData';
+import { RemotiveProvider } from './remotiveProvider';
+import { ArbeitnowProvider } from './arbeitnowProvider';
 
 export interface AggregateJobsResult {
   jobs: Job[];
@@ -18,11 +17,12 @@ export interface AggregateJobsResult {
 
 export class JobAggregatorService {
   private adzuna = new AdzunaProvider();
-  private greenhouse = new GreenhouseProvider();
-  private lever = new LeverProvider();
+  private remotive = new RemotiveProvider();
+  private arbeitnow = new ArbeitnowProvider();
 
   /**
-   * Main aggregator query function
+   * Main aggregator query function — queries all live job providers in parallel
+   * and merges genuine results. No fabricated/sample data is ever mixed in.
    */
   async searchJobs(
     filters: JobFilters = {},
@@ -30,41 +30,77 @@ export class JobAggregatorService {
     sort: JobSortOption = 'best_match'
   ): Promise<AggregateJobsResult> {
     let combinedJobs: Job[] = [];
-    const providersActive: string[] = ['RoleSpire Direct Network'];
+    const providersActive: string[] = [];
     let isRealApiActive = false;
 
-    // 1. Try Adzuna if configured
+    const providerCalls: Promise<void>[] = [];
+
+    // Adzuna requires free API credentials (VITE_ADZUNA_APP_ID / VITE_ADZUNA_APP_KEY)
     if (this.adzuna.isConfigured) {
-      try {
-        const adzunaResult = await this.adzuna.fetchJobs({
-          query: filters.query,
-          location: filters.location,
-          filters,
-        });
-        if (adzunaResult.jobs.length > 0) {
-          combinedJobs = [...combinedJobs, ...adzunaResult.jobs];
-          providersActive.push('Adzuna Live API');
-          isRealApiActive = true;
-        }
-      } catch (err) {
-        console.warn('Adzuna fetch failed, using internal verified catalog:', err);
-      }
+      providerCalls.push(
+        this.adzuna
+          .fetchJobs({ query: filters.query, location: filters.location, filters })
+          .then((result) => {
+            if (result.jobs.length > 0) {
+              combinedJobs = [...combinedJobs, ...result.jobs];
+              providersActive.push('Adzuna Live API');
+              isRealApiActive = true;
+            }
+          })
+          .catch((err) => console.warn('Adzuna fetch failed:', err))
+      );
     }
 
-    // Combine with internal verified & real-world seed data
-    combinedJobs = [...combinedJobs, ...SEED_JOBS];
+    // Remotive & Arbeitnow are free, public, and require no API key
+    providerCalls.push(
+      this.remotive
+        .fetchJobs({ query: filters.query, location: filters.location, filters })
+        .then((result) => {
+          if (result.jobs.length > 0) {
+            combinedJobs = [...combinedJobs, ...result.jobs];
+            providersActive.push('Remotive Live API');
+            isRealApiActive = true;
+          }
+        })
+        .catch((err) => console.warn('Remotive fetch failed:', err))
+    );
+
+    providerCalls.push(
+      this.arbeitnow
+        .fetchJobs({ query: filters.query, location: filters.location, filters })
+        .then((result) => {
+          if (result.jobs.length > 0) {
+            combinedJobs = [...combinedJobs, ...result.jobs];
+            providersActive.push('Arbeitnow Live API');
+            isRealApiActive = true;
+          }
+        })
+        .catch((err) => console.warn('Arbeitnow fetch failed:', err))
+    );
+
+    await Promise.all(providerCalls);
 
     // 2. Filter listings
     let filtered = combinedJobs.filter((job) => {
-      // Keyword search (title, company, description, skills)
+      // Keyword search — match every word in the query somewhere across the
+      // job's searchable text, rather than requiring the exact phrase. This
+      // lets a query like "oracle db" match a job that separately mentions
+      // "Oracle" and "database" instead of returning nothing.
       if (filters.query) {
-        const q = filters.query.toLowerCase().trim();
-        const matchTitle = job.title.toLowerCase().includes(q);
-        const matchCompany = job.company.toLowerCase().includes(q);
-        const matchSkills = (job.skills || []).some((s) => s.toLowerCase().includes(q));
-        const matchDesc = job.description.toLowerCase().includes(q);
-        if (!matchTitle && !matchCompany && !matchSkills && !matchDesc) {
-          return false;
+        const tokens = filters.query.toLowerCase().split(/\s+/).filter(Boolean);
+        if (tokens.length > 0) {
+          const haystack = [
+            job.title,
+            job.company,
+            job.description,
+            job.experienceLevel,
+            job.location,
+            ...(job.skills || []),
+          ]
+            .join(' ')
+            .toLowerCase();
+          const allTokensMatch = tokens.every((t) => haystack.includes(t));
+          if (!allTokensMatch) return false;
         }
       }
 
@@ -87,10 +123,12 @@ export class JobAggregatorService {
         if (job.employmentType !== filters.employmentType) return false;
       }
 
-      // Salary filter (Min salary in INR or converted)
+      // Salary filter — most live listings don't disclose a salary at all
+      // (that isn't the same as "pays below the minimum"), so only exclude a
+      // job here when it actually reports a number that falls short.
       if (filters.minSalary && filters.minSalary > 0) {
-        const salaryMax = job.salaryMax || job.salaryMin || 0;
-        if (salaryMax < filters.minSalary) return false;
+        const reportedSalary = job.salaryMax || job.salaryMin;
+        if (reportedSalary != null && reportedSalary < filters.minSalary) return false;
       }
 
       // Source filter

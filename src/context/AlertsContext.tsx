@@ -1,34 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { JobAlert } from '../types';
 import { LOCAL_STORAGE_KEYS } from '../lib/supabaseClient';
-
-const INITIAL_ALERTS: JobAlert[] = [
-  {
-    id: 'alt_1',
-    userId: 'usr_abhishek_demo',
-    title: 'React Native & Mobile Lead (Ahmedabad / Remote)',
-    keywords: ['React Native', 'Mobile Lead', 'iOS', 'Android'],
-    location: 'Ahmedabad',
-    remoteOnly: false,
-    minSalary: 1800000,
-    frequency: 'daily',
-    isActive: true,
-    createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-    lastTriggeredAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: 'alt_2',
-    userId: 'usr_abhishek_demo',
-    title: 'Remote MERN & Full Stack > ₹20 LPA',
-    keywords: ['MERN', 'Full Stack', 'Node.js', 'React'],
-    remoteOnly: true,
-    minSalary: 2000000,
-    frequency: 'instant',
-    isActive: true,
-    createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-    lastTriggeredAt: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
-  },
-];
+import { useAuth } from './AuthContext';
 
 interface AlertsContextType {
   alerts: JobAlert[];
@@ -40,12 +13,13 @@ interface AlertsContextType {
 const AlertsContext = createContext<AlertsContextType | undefined>(undefined);
 
 export const AlertsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { profile } = useAuth();
   const [alerts, setAlerts] = useState<JobAlert[]>(() => {
     const saved = localStorage.getItem(LOCAL_STORAGE_KEYS.JOB_ALERTS);
     if (saved) {
-      try { return JSON.parse(saved); } catch { return INITIAL_ALERTS; }
+      try { return JSON.parse(saved); } catch { return []; }
     }
-    return INITIAL_ALERTS;
+    return [];
   });
 
   useEffect(() => {
@@ -56,7 +30,7 @@ export const AlertsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const newAlert: JobAlert = {
       ...alertData,
       id: `alt_${Date.now()}`,
-      userId: 'usr_abhishek_demo',
+      userId: profile?.id || 'guest',
       createdAt: new Date().toISOString(),
     };
     setAlerts((prev) => [newAlert, ...prev]);

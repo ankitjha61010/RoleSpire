@@ -116,6 +116,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 id: currentSession.user.id,
                 email: currentSession.user.email || '',
                 fullName: currentSession.user.user_metadata?.full_name || currentSession.user.email?.split('@')[0] || 'User',
+                // `profiles` has no `skills` column (those live in `user_skills`), and a
+                // stale localStorage snapshot could carry a null/missing skills array —
+                // never let a malformed profile drop this to something scoring can't map over.
+                skills: DEFAULT_PROFILE.skills,
               };
               setProfile(prof);
               localStorage.setItem(LOCAL_STORAGE_KEYS.AUTH_SESSION, JSON.stringify(authUser));
@@ -320,6 +324,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .update({
             full_name: merged.fullName,
             headline: merged.headline,
+            company: merged.company,
             bio: merged.bio,
             experience_years: merged.experienceYears,
             current_location: merged.currentLocation,
