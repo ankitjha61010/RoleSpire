@@ -512,12 +512,14 @@ export const SearchPage: React.FC<SearchPageProps> = ({
       {/* RENDER CATEGORY VIEW 2: COMPANIES */}
       {activeCategory === 'companies' && (
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-white flex items-center gap-2">
-              <Building2 className="w-5 h-5 text-brand-400" />
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+            <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+              <Building2 className="w-4 h-4 sm:w-5 sm:h-5 text-brand-400 shrink-0" />
               <span>Verified Companies & Tech Employers ({companiesList.length})</span>
             </h2>
-            <span className="text-xs text-slate-400">Click any company to open complete LinkedIn-style profile</span>
+            <p className="text-[11px] sm:text-xs text-slate-400">
+              Click any company to open complete LinkedIn-style profile
+            </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -597,12 +599,14 @@ export const SearchPage: React.FC<SearchPageProps> = ({
       {/* RENDER CATEGORY VIEW 3: PEOPLE */}
       {activeCategory === 'people' && (
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-white flex items-center gap-2">
-              <Users className="w-5 h-5 text-brand-400" />
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+            <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+              <Users className="w-4 h-4 sm:w-5 sm:h-5 text-brand-400 shrink-0" />
               <span>People, Recruiters & Hiring Managers ({peopleList.length})</span>
             </h2>
-            <span className="text-xs text-slate-400">Connect with recruiters and engineers directly</span>
+            <p className="text-[11px] sm:text-xs text-slate-400">
+              Connect with recruiters and engineers directly
+            </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
