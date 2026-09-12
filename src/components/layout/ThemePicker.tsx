@@ -48,7 +48,7 @@ export const ThemePicker: React.FC<ThemePickerProps> = ({ isOpen: controlledIsOp
       </button>
 
       {isDropdownOpen && (
-        <div className="absolute right-0 top-full mt-2 w-72 glass-dropdown rounded-2xl p-4 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-150 border border-slate-700/80">
+        <div className="fixed sm:absolute right-3 sm:right-0 top-16 sm:top-full mt-0 sm:mt-2 w-[calc(100vw-1.5rem)] sm:w-72 max-w-sm glass-dropdown rounded-2xl p-4 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-150 border border-slate-700/80">
           <div className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3">
             Appearance & Accents
           </div>

@@ -203,7 +203,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activePage, setActivePage }) => 
                 </button>
 
                 {showNotifications && (
-                  <div className="absolute right-0 top-full mt-2 w-80 glass-dropdown rounded-2xl p-3.5 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-150 border border-slate-700/80 text-xs">
+                  <div className="fixed sm:absolute right-3 sm:right-0 top-16 sm:top-full mt-0 sm:mt-2 w-[calc(100vw-1.5rem)] sm:w-80 max-w-sm glass-dropdown rounded-2xl p-3.5 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-150 border border-slate-700/80 text-xs">
                     <div className="flex items-center justify-between pb-2 border-b border-slate-800">
                       <div className="flex items-center gap-1.5 font-bold text-white">
                         <Calendar className="w-3.5 h-3.5 text-brand-400" />
@@ -317,7 +317,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activePage, setActivePage }) => 
                   </button>
 
                   {showProfileMenu && (
-                    <div className="absolute right-0 top-full mt-2 w-64 glass-dropdown rounded-2xl p-2 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-150 border border-slate-700/80 text-xs">
+                    <div className="fixed sm:absolute right-3 sm:right-0 top-16 sm:top-full mt-0 sm:mt-2 w-[calc(100vw-1.5rem)] sm:w-64 max-w-sm glass-dropdown rounded-2xl p-2 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-150 border border-slate-700/80 text-xs">
                       <div className="px-2.5 py-2 border-b border-slate-800 space-y-1.5">
                         <div className="flex items-center justify-between gap-1">
                           <span className="font-bold text-white truncate text-xs">{profile.fullName}</span>
